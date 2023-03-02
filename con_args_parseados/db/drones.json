@@ -1,12 +1,1 @@
-[
-    {
-        "id": "drone-1",
-        "listens": 64001,
-        "linked_ets": []
-    },
-    {
-        "id": "drone-4",
-        "listens": 64003,
-        "linked_ets": []
-    }
-]
+[{"id": "drone-1", "listens": 64001, "linked_ets": ["et03", "et01", "et01"]}, {"id": "drone-4", "listens": 64003, "linked_ets": []}]

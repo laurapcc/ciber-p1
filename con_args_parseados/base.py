@@ -2,6 +2,8 @@ import argparse
 import json
 from json.decoder import JSONDecodeError
 import socket
+import shutil
+import os
 
 HOST = "127.0.0.1"
 PORT = 65300
@@ -48,7 +50,7 @@ def main():
         print("SEND FILE")
         if args.et_id:
             print("et_id:", args.et_id)
-            send_file(args.et_id)
+            send_file(args.et_id, args.file)
             # FIN
         else:
             print("ERROR: Debes proporcionar un et_id")
@@ -97,8 +99,6 @@ def main():
     #                break
     #            conn.sendall("Hello estacion".encode())
 
-
-
 def send_msg(et_id, msg):
     print('TODO: send_msg')
     with open("db/estaciones.json", "r") as jsonFile:
@@ -121,12 +121,34 @@ def send_msg(et_id, msg):
             return
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, ET_PORT))
-        s.sendall(msg)
+        s.sendall(msg.encode())
         print("Mensaje enviado")
     return
 
-def send_file(et_id):
-    print('TODO: send_file')
+def send_file(et_id, file):
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            ids = [et["id"] for et in data]
+            if et_id not in ids:
+                print("ERROR: La ET con ID", et_id, "no existe")
+                return
+
+            a = file.rfind("/")
+
+            file_name = file[a:]
+
+            for el in data:
+                if el['id'] == et_id:
+                    et_route = el['files']
+
+        except JSONDecodeError:
+            # Primera entrada del json
+            print("ERROR: No hay estaciones registradas")
+            return
+    os.makedirs(os.path.dirname(et_route), exist_ok=True)
+    shutil.copyfile(file, et_route + file_name)
 
 def fly(drone_id):
     print('TODO: fly')

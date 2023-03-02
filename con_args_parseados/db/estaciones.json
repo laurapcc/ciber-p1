@@ -1,10 +1,1 @@
-[
-    {
-        "id": "et01",
-        "listens_bo": 66001
-    },
-    {
-        "id": "et02",
-        "listens_bo": 66002
-    }
-]
+[{"id": "et03", "listens_bo": 65000, "linked_drones": [], "files": "ets/et03/files/"}]
