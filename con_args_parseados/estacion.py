@@ -71,6 +71,7 @@ def main():
 
         else:
             print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
+            return
 
         args.connect = False
         args.drone_id = False

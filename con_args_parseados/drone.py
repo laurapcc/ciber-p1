@@ -1,6 +1,7 @@
 import argparse
 import json
 from json.decoder import JSONDecodeError
+import os
 import socket
 import threading
 import time
@@ -243,9 +244,10 @@ def listen_to_et(listen_port):
         s.bind((HOST, listen_port))
         print("Drone listening on port", listen_port)
         s.listen()
+        conn, addr = s.accept()
         while True:
-            conn, addr = s.accept()
             data = recvall(conn)
+            print(data)
             if data == "FLY":
                 # TODO
                 print("a volar")
@@ -264,15 +266,22 @@ def recvall(conn, buff_size=4096):
         data += conn.recv(buff_size)
         if len(data) < buff_size:
             break
+    return data.decode()
 
 
 def telemetry(drone_id, et_port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, et_port))
+        try:
+            s.connect((HOST, et_port))
+        except:
+            print("ERROR: No se pudo conectar con la estacion de tierra")
+            os._exit(1)
+
         while True:
             msg = telemetry_msg(drone_id)
+            print(msg)
             try:
-                s.sendall(b"Hello drone")
+                s.sendall(msg.encode())
             except:
                 print("ERROR while sending telemetry")
                 return
@@ -280,6 +289,8 @@ def telemetry(drone_id, et_port):
 
 
 def telemetry_msg(drone_id):
+    global STATUS
+    global BATTERY
     if STATUS == "FLYING":
         time_elapsed = time.time() - FLY_START_TIME
         BATTERY = round(time_elapsed*100/60, 2)

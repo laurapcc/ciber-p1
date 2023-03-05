@@ -1,1 +1,1 @@
-[{"id": "et03", "listens_bo": 65000, "linked_drones": [], "files": "ets/et03/files/"}]
+[{"id": "et03", "listens_bo": 65000, "linked_drones": ["drone-1", "drone-2"], "files": "ets/et03/files/"}]
