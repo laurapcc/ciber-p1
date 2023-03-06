@@ -5,6 +5,7 @@ import os
 import socket
 import threading
 import time
+import atexit
 
 
 HOST = "127.0.0.1"
@@ -17,6 +18,18 @@ FLY_START_TIME = -1
 
 
 descripcion = "Envia un comando a un dron"
+
+def exit_handler(args):
+    print("Borrando dron y saliendo.")
+    with open("db/drones.json", "r") as jsonFile:
+        data = json.load(jsonFile)
+        new_data = []
+        for drone in data:
+            if drone["id"] != args:
+                new_data.append(drone)
+
+    with open("db/drones.json", "w") as jsonFile:
+        json.dump(new_data, jsonFile)
 
 
 
@@ -40,6 +53,8 @@ def main():
     ## Alguna estrucura especial para los IDs?? Regex???
 
     args = parser.parse_args()
+
+    atexit.register(exit_handler, args=args.drone_id)
 
     if args.register:
         print("REGISTER")

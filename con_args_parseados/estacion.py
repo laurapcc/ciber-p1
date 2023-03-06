@@ -3,12 +3,29 @@ import json
 from json.decoder import JSONDecodeError
 import socket
 import threading
+import os
+import shutil
+import atexit
 
 HOST = "127.0.0.1"
 DRONE_PORT = 65300
 
 
 descripcion = "Estacion de tierra"
+
+def exit_handler(args):
+    print("Borrando estacion y saliendo.")
+    with open("db/estaciones.json", "r") as jsonFile:
+        data = json.load(jsonFile)
+        new_data = []
+        for et in data:
+            if et["id"] != args:
+                new_data.append(et)
+
+    with open("db/estaciones.json", "w") as jsonFile:
+        json.dump(new_data, jsonFile)
+
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -22,27 +39,56 @@ def main():
     parser.add_argument('--link', action='store_true', dest='link', default=False, help='LINK dron -/-> estacion de tierra')
     parser.add_argument('--unlink', action='store_true', dest='unlink', default=False, help='UNLINK dron -/-> estacion de tierra')
     parser.add_argument('--connect', action='store_true', dest='connect', default=False, help='CONNECT dron -> estacion de tierra')
+    parser.add_argument('--send_msg', action='store_true', dest='send_msg', default=False, help='Envio de mensaje')
+    parser.add_argument('--send_file', action='store_true', dest='send_file', default=False, help='Envio de fichero')
+    parser.add_argument('--info_to_bo', action='store_true', dest='bo', default=False, help='Enviar mensaje/fichero a BO')
 
     # IDs 
     parser.add_argument('--drone_id', dest='drone_id', default=False, help='ID de dron')
     parser.add_argument('--et_id', dest='et_id', default=False, help='ID de estacion de tierra ID')
+    parser.add_argument('--msg', dest='msg', default=False, help='Mensaje a enviar')
+    parser.add_argument('--file', dest='file', default=False, help='Fichero a enviar')
 
     ## Alguna estrucura especial para los IDs?? Regex???
 
     args = parser.parse_args()
 
-    x = threading.Thread(target=recv_thread, args=(args.et_id,))
-    x.daemon = True
-    x.start()
+    atexit.register(exit_handler, args=args.et_id)
 
-    while True:
-        if args.register:
+    ##Cada vez que se inicie el programa habrá que registrar la estacion y al cerrarlo se borra
+    if args.register:
             print("REGISTER")
             if args.et_id:
                 print("et_id:", args.et_id)
                 register_estacion(args.et_id)
             else:
                 print("ERROR: Debes proporcionar un et_id")
+
+    else:
+        print("ERROR: primero debes registrar la estacion")
+        return
+
+    x = threading.Thread(target=recv_thread, args=(args.et_id,))
+    x.daemon = True
+    x.start()
+    
+    et_id = args.et_id
+
+    while True:
+        if registered(et_id):
+            print(et_id)
+            if args.send_msg:
+                print("SEND MESSAGE")
+                if (args.et_id or args.bo) and args.msg:
+                    send_msg(args.bo, args.et_id, args.msg)
+                else:
+                    print("ERROR: Debes proporcionar un et_id y un mensaje")
+
+            elif args.send_file:
+                print("SEND FILE")
+                if (args.et_id or args.bo) and args.file:
+                    print("et_id:", args.et_id)
+                    send_file(args.et_id, args.file)
 
         elif args.link:
             print("LINK")
@@ -69,18 +115,14 @@ def main():
             else:
                 print("ERROR: Debes proporcionar un drone_id y un et_id")
 
-        else:
-            print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
-            return
-
-        args.connect = False
-        args.drone_id = False
-        args.et_id = False
-        args.register = False
-        args.unlink = False
-
         command = input("Comando: ")
-        args = parser.parse_args(command.split())    
+        args = parser.parse_args(command.split()) 
+
+        ##else:
+        ##   print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
+        ##   return
+
+           
         
 
 
@@ -94,6 +136,21 @@ def main():
     #    data = s.recv(1024)
 #
     #print(f"Received {data!r}")
+
+def registered(et_id):
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            # Comprobar que existe
+            ids = [et["id"] for et in data]
+            if et_id in ids:
+                return True
+
+        except JSONDecodeError:
+            print("ERROR: no hay entradas registradas")
+    
+    return False
 
 
 def register_estacion(et_id):
@@ -118,7 +175,7 @@ def register_estacion(et_id):
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
     
-    print("REGISTEER completado con exito: estacion de tierra registrada con ID:", et_id)
+    print("REGISTER completado con exito: estacion de tierra registrada con ID:", et_id)
 
 
 def link_drone_et(drone_id, et_id):
@@ -220,27 +277,92 @@ def recv_thread(et_id):
         try:
             data = json.load(jsonFile)
 
+            et_port = 0
             for el in data:
                 if el['id'] == et_id:
                     et_port = el['listens_bo']
                     print(et_port)
+            if not et_port:
+                print("ERROR: la estacion de tierra con ID: " + et_id + " no está registrada")
 
         except JSONDecodeError:
-            print("ERROR: La estacion de tierra con ID", et_id, "no existe")
+            print("ERROR: No hay estaciones de tierra")
             return
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, et_port))
-        s.listen(1)
-        while True:
-            conn, addr = s.accept()
-            with conn:
-                print('Connected by', addr)
-                while True:
-                    data = conn.recv(1024)
-                    if not data: break
-                    print(data.decode())
+            s.bind((HOST, et_port))
+            s.listen(1)
+            while True:
+                conn, addr = s.accept()
+                with conn:
+                    print('Connected by', addr)
+                    while True:
+                        data = conn.recv(1024)
+                        if not data: break
+                        print(data.decode())
 
+def send_msg(bo, et_id, msg):
+    print('TODO: send_msg')
+    if bo:
+        with open("db/base.json", "r") as jsonFile:
+            try:
+                data = json.load(jsonFile)
+                PORT = data[0]["port"]
+
+            
+            except (JSONDecodeError, OSError):
+                print("ERROR: la base de operaciones no esta activa")
+                return
+
+    else:
+        with open("db/estaciones.json", "r") as jsonFile:
+            try:
+                data = json.load(jsonFile)
+
+                ids = [et["id"] for et in data]
+                if et_id not in ids:
+                    print("ERROR: La ET con ID", et_id, "no existe")
+                    return
+
+                # Añadir nuevo drone con un puerto libre
+                for el in data:
+                    if el['id'] == et_id:
+                        PORT = el['listens_bo']
+
+            except JSONDecodeError:
+                # Primera entrada del json
+                print("ERROR: No hay estaciones registradas")
+                return
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        s.sendall(msg.encode())
+        print("Mensaje enviado")
+    return
+
+def send_file(et_id, file):
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            ids = [et["id"] for et in data]
+            if et_id not in ids:
+                print("ERROR: La ET con ID", et_id, "no existe")
+                return
+
+            a = file.rfind("/")
+
+            file_name = file[a:]
+
+            for el in data:
+                if el['id'] == et_id:
+                    et_route = el['files']
+
+        except JSONDecodeError:
+            # Primera entrada del json
+            print("ERROR: No hay estaciones registradas")
+            return
+    os.makedirs(os.path.dirname(et_route), exist_ok=True)
+    shutil.copyfile(file, et_route + file_name)
 
 if __name__ == "__main__":
     main()

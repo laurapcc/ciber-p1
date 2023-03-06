@@ -4,14 +4,23 @@ from json.decoder import JSONDecodeError
 import socket
 import shutil
 import os
+import threading
+import atexit
 
 HOST = "127.0.0.1"
 PORT = 65300
 
 
 
-descripcion = "Envia un comando a una base"
+descripcion = "Envia un comando a la base de operaciones"
 
+def exit_handler():
+    print("Borrando base de operaciones y saliendo.")
+    with open("db/base.json", "r") as jsonFile:
+        new_data = []
+
+    with open("db/base.json", "w") as jsonFile:
+        json.dump(new_data, jsonFile)
 
 
 def main():
@@ -35,55 +44,89 @@ def main():
     parser.add_argument('--msg', dest='msg', default=False, help='Mensaje a enviar')
     parser.add_argument('--file', dest='file', default=False, help='Fichero a enviar')
 
-    ## Alguna estrucura especial para los IDs?? Regex???
+    ##TODO: Alguna estrucura especial para los IDs?? Regex???
+
+    try:
+        jsonFile = open("db/base.json", "r")
+        data = json.load(jsonFile)
+
+        if data:
+            print("ERROR: ya hay base de operaciones")
+            return
+
+    except (JSONDecodeError, OSError):
+        # Primera entrada del json
+        data = [{"status": "active", "port": PORT}]
+
+        with open("db/base.json", "w+") as jsonFile:
+            json.dump(data, jsonFile)
+            print("Base de operaciones esperando instrucciones")
 
     args = parser.parse_args()
 
-    if args.send_msg:
-        print("SEND MESSAGE")
-        if args.et_id and args.msg:
-            send_msg(args.et_id, args.msg)
-        else:
-            print("ERROR: Debes proporcionar un et_id")
+    atexit.register(exit_handler)
 
-    elif args.send_file:
-        print("SEND FILE")
-        if args.et_id:
-            print("et_id:", args.et_id)
-            send_file(args.et_id, args.file)
-            # FIN
-        else:
-            print("ERROR: Debes proporcionar un et_id")
+    x = threading.Thread(target=recv_thread)
+    x.daemon = True
+    x.start()
+
+    while True:
+        if args.send_msg:
+            print("SEND MESSAGE")
+            if args.et_id and args.msg:
+                send_msg(args.et_id, args.msg)
+            else:
+                print("ERROR: Debes proporcionar un et_id")
+
+        elif args.send_file:
+            print("SEND FILE")
+            if args.et_id:
+                print("et_id:", args.et_id)
+                send_file(args.et_id, args.file)
+            else:
+                print("ERROR: Debes proporcionar un et_id")
+            
+        elif args.fly:
+            print("FLY")
+            if args.drone_id:
+                print("drone_id:", args.drone_id)
+                fly(args.drone_id)
+            else:
+                print("ERROR: Debes proporcionar un drone_id")
+
+        elif args.land:
+            print("LAND")
+            if args.drone_id:
+                print("drone_id:", args.drone_id)
+                land(args.drone_id)
+            else:
+                print("ERROR: Debes proporcionar un drone_id")
+
+        elif args.get_status:
+            print("GET_STATUS")
+            get_status()
         
-    elif args.fly:
-        print("FLY")
-        if args.drone_id:
-            print("drone_id:", args.drone_id)
-            fly(args.drone_id)
+        elif args.shutdown:
+            print("SHUTDOWN")
+            shutdown()
         else:
-            print("ERROR: Debes proporcionar un drone_id")
+            print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
 
-    elif args.land:
-        print("LAND")
-        if args.drone_id:
-            print("drone_id:", args.drone_id)
-            land(args.drone_id)
-        else:
-            print("ERROR: Debes proporcionar un drone_id")
+        args.fly = False
+        args.land = False
+        args.get_status = False
+        args.sgutdown = False
+        args.send_msg = False
+        args.send_file = False
+        args.drone_id = False
+        args.et_id = False
+        args.msg = False
+        args.file = False
 
-    elif args.get_status:
-        print("GET_STATUS")
-        get_status()
+        command = input("Comando: ")
+        args = parser.parse_args(command.split()) 
+
     
-    elif args.shutdown:
-        print("SHUTDOWN")
-        shutdown()
-    else:
-        print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
-
-
-
-    # TODO: comprobar que hay base de operaciones
 
     #with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     #    s.bind((HOST, PORT))
@@ -98,6 +141,31 @@ def main():
     #            if not data:
     #                break
     #            conn.sendall("Hello estacion".encode())
+
+def recv_thread():
+    with open("db/base.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            bo_port = data[0]["port"]
+
+        except JSONDecodeError:
+            print("ERROR: La base de operaciones no está registrada")
+            return
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, bo_port))
+        s.listen(1)
+        while True:
+            conn, addr = s.accept()
+            with conn:
+                print('Connected by', addr)
+                while True:
+                    data = conn.recv(1024)
+                    if not data: break
+                    print(data.decode())
+
+
 
 def send_msg(et_id, msg):
     print('TODO: send_msg')
