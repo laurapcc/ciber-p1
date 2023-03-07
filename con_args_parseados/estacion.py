@@ -76,7 +76,6 @@ def main():
 
     while True:
         if registered(et_id):
-            print(et_id)
             if args.send_msg:
                 print("SEND MESSAGE")
                 if (args.et_id or args.bo) and args.msg:
@@ -157,20 +156,22 @@ def register_estacion(et_id):
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
+            if data:
+                # Comprobar que no existe
+                ids = [et["id"] for et in data]
+                if et_id in ids:
+                    print("ERROR: La estacion con ID", et_id, "ya existe")
+                    return
 
-            # Comprobar que no existe
-            ids = [et["id"] for et in data]
-            if et_id in ids:
-                print("ERROR: La estacion con ID", et_id, "ya existe")
-                return
-
-            # Añadir nueva estacion con puertos libres
-            maxPort = max([et["listens_bo"] for et in data])
-            data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "files": "ets/" + et_id + "/files/"})
-
+                # Añadir nueva estacion con puertos libres
+                maxPort = max([et["listens_bo"] for et in data])
+                data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "files": "ets/" + et_id + "/files/"})
+            # Caso en que en el json hay una lista vacia
+            else:
+                data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
         except JSONDecodeError:
             # Primera entrada del json
-            data = [{"id": et_id, "listens_bo": 65000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
+            data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
 
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(data, jsonFile)

@@ -62,48 +62,56 @@ def main():
             register_drone(args.drone_id)
         else:
             print("ERROR: Debes proporcionar un drone_id")
-
-    elif args.link:
-        print("LINK")
-        if args.drone_id and args.et_id:
-            link_drone_et(args.drone_id, args.et_id)
-            # FIN
-        else:
-            print("ERROR: Debes proporcionar un drone_id y un et_id")
-        
-    elif args.unlink:
-        print("UNLINK")
-        if args.drone_id and args.et_id:
-            print("drone_id:", args.drone_id)
-            print("et_id:", args.et_id)
-            # TODO: eliminar de fichero
-            unlink_drone_et(args.drone_id,args. et_id)
-            # FIN
-        else:
-            print("ERROR: Debes proporcionar un drone_id y un et_id")
-
-    elif args.connect:
-        print("CONNECT")
-        if args.drone_id and args.et_id:
-            print("drone_id:", args.drone_id)
-            print("et_id:", args.et_id)
-            # comprobar que drone y et estan linkeados
-            listen_port = check_linked(args.drone_id, args.et_id)
-            if not listen_port:
-                print("ERROR: drone con id", args.drone_id, "y estacion con id", args.et_id, "no estan linkeados")
-                return
-            # TODO: ponerse a esuchar a ET: fly / disconnect
-            # TODO: activar telemetry y seguir escuchando hasta LAND  
-            telemetry_thread = threading.Thread(target=telemetry, args=(args.drone_id, listen_port+1,))
-            telemetry_thread.daemon = True
-            telemetry_thread.start()
-            listen_to_et(listen_port)
-        else:
-            print("ERROR: Debes proporcionar un drone_id y un et_id")
-
     else:
-        print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
+        print("Debes registrar el dron al iniciar")
+        return
 
+    while True:
+        if args.link:
+            print("LINK")
+            if args.drone_id and args.et_id:
+                link_drone_et(args.drone_id, args.et_id)
+                # FIN
+            else:
+                print("ERROR: Debes proporcionar un drone_id y un et_id")
+            
+        elif args.unlink:
+            print("UNLINK")
+            if args.drone_id and args.et_id:
+                print("drone_id:", args.drone_id)
+                print("et_id:", args.et_id)
+                # TODO: eliminar de fichero
+                unlink_drone_et(args.drone_id,args. et_id)
+                # FIN
+            else:
+                print("ERROR: Debes proporcionar un drone_id y un et_id")
+
+        elif args.connect:
+            print("CONNECT")
+            if args.drone_id and args.et_id:
+                print("drone_id:", args.drone_id)
+                print("et_id:", args.et_id)
+                # comprobar que drone y et estan linkeados
+                listen_port = check_linked(args.drone_id, args.et_id)
+                print(listen_port)
+                if not listen_port:
+                    print("ERROR: drone con id", args.drone_id, "y estacion con id", args.et_id, "no estan linkeados")
+                    
+                # TODO: ponerse a esuchar a ET: fly / disconnect
+                # TODO: activar telemetry y seguir escuchando hasta LAND  
+                else:
+                    telemetry_thread = threading.Thread(target=telemetry, args=(args.drone_id, listen_port-1,))
+                    telemetry_thread.daemon = True
+                    telemetry_thread.start()
+                    listen_to_et(listen_port)
+            else:
+                print("ERROR: Debes proporcionar un drone_id y un et_id")
+
+        elif not args.register:
+            print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
+
+        command = input("Comando: ")
+        args = parser.parse_args(command.split()) 
 
 
     # TODO: comprobar que hay base de operaciones
@@ -136,8 +144,12 @@ def register_drone(drone_id):
                 return
 
             # Añadir nuevo drone con un puerto libre
-            maxPort = max([drone["listens"] for drone in data])
-            data.append({"id": drone_id, "listens": maxPort+2, "linked_ets": []})
+            if data:
+                maxPort = max([drone["listens"] for drone in data])
+                data.append({"id": drone_id, "listens": maxPort+2, "linked_ets": []})
+            # Caso en que la lista en el json esta vacia pero existe
+            else:
+                data = [{"id": drone_id, "listens": 64001, "linked_ets": []}]
 
         except JSONDecodeError:
             # Primera entrada del json
@@ -148,7 +160,7 @@ def register_drone(drone_id):
     
     print("REGISTEER completado con exito: drone registrado con ID:", drone_id)
 
-
+#TODO: comprobar que no estan ya linkeados
 def link_drone_et(drone_id, et_id):
     # Dron existe
     with open("db/drones.json", "r") as jsonFile:
@@ -285,14 +297,15 @@ def recvall(conn, buff_size=4096):
 
 
 def telemetry(drone_id, et_port):
+    flag = 0
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.connect((HOST, et_port))
         except:
             print("ERROR: No se pudo conectar con la estacion de tierra")
-            os._exit(1)
+            flag = 1
 
-        while True:
+        while True and not flag:
             msg = telemetry_msg(drone_id)
             print(msg)
             try:
