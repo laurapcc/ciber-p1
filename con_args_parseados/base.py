@@ -16,11 +16,14 @@ descripcion = "Envia un comando a la base de operaciones"
 
 def exit_handler():
     print("Borrando base de operaciones y saliendo.")
-    with open("db/base.json", "r") as jsonFile:
-        new_data = []
+    os.remove("db/base.json")
+    # NOTA: si dejamos el archivo luego peta por index out of range al abrir
+    #       si lo borramos nos ahorramos ese problem
+    ##with open("db/base.json", "r") as jsonFile:
+    ##    new_data = []
 
-    with open("db/base.json", "w") as jsonFile:
-        json.dump(new_data, jsonFile)
+    ##with open("db/base.json", "w") as jsonFile:
+    ##    json.dump(new_data, jsonFile)
 
 
 def main():
@@ -70,7 +73,16 @@ def main():
     x.daemon = True
     x.start()
 
+    command = input("Comando: ")
     while True:
+        try:
+            args = parser.parse_args(command.split()) 
+        except:
+            print("ERROR: Comando no reconocido")
+            parser.print_help()
+            command = input("Comando: ")
+            continue
+
         if args.send_msg:
             print("SEND MESSAGE")
             if args.et_id and args.msg:
@@ -111,6 +123,8 @@ def main():
             shutdown()
         else:
             print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
+            parser.print_help()
+
 
         args.fly = False
         args.land = False
@@ -124,7 +138,7 @@ def main():
         args.file = False
 
         command = input("Comando: ")
-        args = parser.parse_args(command.split()) 
+        # args = parser.parse_args(command.split()) 
 
     
 
@@ -146,7 +160,6 @@ def recv_thread():
     with open("db/base.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
-
             bo_port = data[0]["port"]
 
         except JSONDecodeError:

@@ -57,12 +57,20 @@ def main():
 
     ##Cada vez que se inicie el programa habrá que registrar la estacion y al cerrarlo se borra
     if args.register:
-            print("REGISTER")
-            if args.et_id:
-                print("et_id:", args.et_id)
-                register_estacion(args.et_id)
-            else:
-                print("ERROR: Debes proporcionar un et_id")
+        print("REGISTER")
+        if args.et_id:
+            # Comprobar si la BO está conectada
+            try:
+                jsonFile = open("db/base.json", "r")
+            except:
+                print("ERROR: no hay base de datos")
+                return
+
+            print("et_id:", args.et_id)
+            et_id = args.et_id
+            register_estacion(args.et_id)
+        else:
+            print("ERROR: Debes proporcionar un et_id")
 
     else:
         print("ERROR: primero debes registrar la estacion")
@@ -72,69 +80,64 @@ def main():
     x.daemon = True
     x.start()
     
-    et_id = args.et_id
 
+    command = input("Comando: ")
     while True:
-        if registered(et_id):
-            if args.send_msg:
-                print("SEND MESSAGE")
-                if (args.et_id or args.bo) and args.msg:
-                    send_msg(args.bo, args.et_id, args.msg)
-                else:
-                    print("ERROR: Debes proporcionar un et_id y un mensaje")
+        try:
+            args = parser.parse_args(command.split()) 
+        except:
+            print("ERROR: Comando no reconocido")
+            parser.print_help()
+            command = input("Comando: ")
+            continue
 
-            elif args.send_file:
-                print("SEND FILE")
-                if (args.et_id or args.bo) and args.file:
-                    print("et_id:", args.et_id)
-                    send_file(args.et_id, args.file)
+        ## NOTA : si se ha llegado hasta aqui es porquue la et se ha registrado
+        ## if registered(et_id):
+        if args.send_msg:
+            print("SEND MESSAGE")
+            if (args.et_id or args.bo) and args.msg:
+                send_msg(args.bo, args.et_id, args.msg)
+            else:
+                print("ERROR: Debes proporcionar un mensaje y si el mensaje va a otra ET o la BO")
+
+        elif args.send_file:
+            print("SEND FILE")
+            if (args.et_id or args.bo) and args.file:
+                send_file(args.bo, args.et_id, args.file)
+            else:
+                print("ERROR: Debes proporcionar la ruta del archivo y si va dirigido a otra ET o la BO")
 
         elif args.link:
             print("LINK")
-            if args.drone_id and args.et_id:
+            if args.drone_id:
                 print("drone_id:", args.drone_id)
-                print("et_id:", args.et_id)
-                link_drone_et(args.drone_id, args.et_id)
+                link_drone_et(args.drone_id, et_id)
             else:
-                print("ERROR: Debes proporcionar un drone_id y un et_id")
+                print("ERROR: Debes proporcionar un drone_id")
             
         elif args.unlink:
             print("UNLINK")
-            if args.drone_id and args.et_id:
+            if args.drone_id:
                 print("drone_id:", args.drone_id)
-                print("et_id:", args.et_id)
             else:
-                print("ERROR: Debes proporcionar un drone_id y un et_id")
+                print("ERROR: Debes proporcionar un drone_id")
 
         elif args.connect:
             print("CONNECT")
-            if args.drone_id and args.et_id:
+            if args.drone_id:
                 print("drone_id:", args.drone_id)
-                print("et_id:", args.et_id)
             else:
-                print("ERROR: Debes proporcionar un drone_id y un et_id")
+                print("ERROR: Debes proporcionar un drone_id")
+
+        else:
+           print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
+           parser.print_help()
 
         command = input("Comando: ")
-        args = parser.parse_args(command.split()) 
-
-        ##else:
-        ##   print("ERROR: Debes proporcionar un tipo de mensaje a enviar")
-        ##   return
 
            
-        
 
 
-
-    
-    
-    #with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    #    s.connect((HOST, DRONE_PORT))
-    #    print("Connected to drone")
-    #    s.sendall(b"Hello drone")
-    #    data = s.recv(1024)
-#
-    #print(f"Received {data!r}")
 
 def registered(et_id):
     with open("db/estaciones.json", "r") as jsonFile:
@@ -161,7 +164,7 @@ def register_estacion(et_id):
                 ids = [et["id"] for et in data]
                 if et_id in ids:
                     print("ERROR: La estacion con ID", et_id, "ya existe")
-                    return
+                    os._exit(1)
 
                 # Añadir nueva estacion con puertos libres
                 maxPort = max([et["listens_bo"] for et in data])
@@ -177,6 +180,7 @@ def register_estacion(et_id):
         json.dump(data, jsonFile)
     
     print("REGISTER completado con exito: estacion de tierra registrada con ID:", et_id)
+
 
 
 def link_drone_et(drone_id, et_id):
@@ -282,7 +286,7 @@ def recv_thread(et_id):
             for el in data:
                 if el['id'] == et_id:
                     et_port = el['listens_bo']
-                    print(et_port)
+                    print("ET", et_id, "escuchando en puerto", et_port)
             if not et_port:
                 print("ERROR: la estacion de tierra con ID: " + et_id + " no está registrada")
 
@@ -303,7 +307,7 @@ def recv_thread(et_id):
                         print(data.decode())
 
 def send_msg(bo, et_id, msg):
-    print('TODO: send_msg')
+    print('TODO: send_msg con espacios')
     if bo:
         with open("db/base.json", "r") as jsonFile:
             try:
@@ -334,36 +338,41 @@ def send_msg(bo, et_id, msg):
                 # Primera entrada del json
                 print("ERROR: No hay estaciones registradas")
                 return
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         s.sendall(msg.encode())
         print("Mensaje enviado")
     return
 
-def send_file(et_id, file):
-    with open("db/estaciones.json", "r") as jsonFile:
-        try:
-            data = json.load(jsonFile)
+def send_file(bo, et_id, file):
+    if bo:
+        # enviar file a la BO
+        pass
+    else:
+        with open("db/estaciones.json", "r") as jsonFile:
+            try:
+                data = json.load(jsonFile)
 
-            ids = [et["id"] for et in data]
-            if et_id not in ids:
-                print("ERROR: La ET con ID", et_id, "no existe")
+                ids = [et["id"] for et in data]
+                if et_id not in ids:
+                    print("ERROR: La ET con ID", et_id, "no existe")
+                    return
+
+                a = file.rfind("/")
+
+                file_name = file[a:]
+
+                for el in data:
+                    if el['id'] == et_id:
+                        et_route = el['files']
+
+            except JSONDecodeError:
+                # Primera entrada del json
+                print("ERROR: No hay estaciones registradas")
                 return
-
-            a = file.rfind("/")
-
-            file_name = file[a:]
-
-            for el in data:
-                if el['id'] == et_id:
-                    et_route = el['files']
-
-        except JSONDecodeError:
-            # Primera entrada del json
-            print("ERROR: No hay estaciones registradas")
-            return
-    os.makedirs(os.path.dirname(et_route), exist_ok=True)
-    shutil.copyfile(file, et_route + file_name)
+        os.makedirs(os.path.dirname(et_route), exist_ok=True)
+        shutil.copyfile(file, et_route + file_name)
 
 if __name__ == "__main__":
     main()
