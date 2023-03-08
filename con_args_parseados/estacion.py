@@ -15,6 +15,7 @@ descripcion = "Estacion de tierra"
 
 def exit_handler(args):
     print("Borrando estacion y saliendo.")
+    # TODO: borrar todo rastro de esta ET en drones.json
     with open("db/estaciones.json", "r") as jsonFile:
         data = json.load(jsonFile)
         new_data = []
@@ -38,10 +39,13 @@ def main():
     parser.add_argument('--register', action='store_true', dest='register', default=False, help='REGISTRO estacion de tierra')
     parser.add_argument('--link', action='store_true', dest='link', default=False, help='LINK dron -/-> estacion de tierra')
     parser.add_argument('--unlink', action='store_true', dest='unlink', default=False, help='UNLINK dron -/-> estacion de tierra')
-    parser.add_argument('--connect', action='store_true', dest='connect', default=False, help='CONNECT dron -> estacion de tierra')
+    #parser.add_argument('--connect', action='store_true', dest='connect', default=False, help='CONNECT dron -> estacion de tierra')
     parser.add_argument('--send_msg', action='store_true', dest='send_msg', default=False, help='Envio de mensaje')
     parser.add_argument('--send_file', action='store_true', dest='send_file', default=False, help='Envio de fichero')
     parser.add_argument('--info_to_bo', action='store_true', dest='bo', default=False, help='Enviar mensaje/fichero a BO')
+    parser.add_argument('--fly', action='store_true', dest='fly', default=False, help='Indicar a un drone que incie el vuelo')
+    parser.add_argument('--land', action='store_true', dest='land', default=False, help='Indicar a un drone que aterrice')
+    parser.add_argument('--disconnect', action='store_true', dest='disconnect', default=False, help='Indicar a un drone que se desconecte')
 
     # IDs 
     parser.add_argument('--drone_id', dest='drone_id', default=False, help='ID de dron')
@@ -119,13 +123,39 @@ def main():
             print("UNLINK")
             if args.drone_id:
                 print("drone_id:", args.drone_id)
+                unlink_drone_et(args.drone_id, et_id)
             else:
                 print("ERROR: Debes proporcionar un drone_id")
 
-        elif args.connect:
-            print("CONNECT")
+        # NOTA: la et no hace connect
+        #elif args.connect:
+        #    print("CONNECT")
+        #    if args.drone_id:
+        #        print("drone_id:", args.drone_id)
+        #    else:
+        #        print("ERROR: Debes proporcionar un drone_id")
+
+        elif args.fly:
+            print("FLY")
             if args.drone_id:
                 print("drone_id:", args.drone_id)
+                send_fly(args.drone_id)
+            else:
+                print("ERROR: Debes proporcionar un drone_id")
+
+        elif args.land:
+            print("LAND")
+            if args.drone_id:
+                print("drone_id:", args.drone_id)
+                send_land(args.drone_id)
+            else:
+                print("ERROR: Debes proporcionar un drone_id")
+
+        elif args.disconnect:
+            print("DISCONNECT")
+            if args.drone_id:
+                print("drone_id:", args.drone_id)
+                send_disconnect(args.drone_id)
             else:
                 print("ERROR: Debes proporcionar un drone_id")
 
@@ -168,13 +198,13 @@ def register_estacion(et_id):
 
                 # Añadir nueva estacion con puertos libres
                 maxPort = max([et["listens_bo"] for et in data])
-                data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "files": "ets/" + et_id + "/files/"})
+                data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "connected_drones": [], "files": "ets/" + et_id + "/files/"})
             # Caso en que en el json hay una lista vacia
             else:
-                data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
+                data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "connected_drones": [], "files": "ets/" + et_id + "/files/"}]
         except JSONDecodeError:
             # Primera entrada del json
-            data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
+            data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "connected_drones": [], "files": "ets/" + et_id + "/files/"}]
 
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
@@ -251,7 +281,10 @@ def unlink_drone_et(drone_id, et_id):
             data = json.load(jsonFile)
             for drone in data:
                 if drone["id"] == drone_id:
-                    drone["linked_ets"].remove(et_id)
+                    try:
+                        drone["linked_ets"].remove(et_id)
+                    except:
+                        print("ET y drone no estaban linkeados")
                     break
 
         except JSONDecodeError:
@@ -267,7 +300,10 @@ def unlink_drone_et(drone_id, et_id):
 
         for et in data:
             if et["id"] == et_id:
-                et["linked_drones"].remove(drone_id)
+                try:
+                    et["linked_drones"].remove(drone_id)
+                except:
+                    print("ET y drone no estaban linkeados")
                 break
 
     with open("db/estaciones.json", "w") as jsonFile:
@@ -373,6 +409,68 @@ def send_file(bo, et_id, file):
                 return
         os.makedirs(os.path.dirname(et_route), exist_ok=True)
         shutil.copyfile(file, et_route + file_name)
+
+
+def send_fly(drone_id):
+    with open("db/drones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+            for drone in data:
+                if drone['id'] == drone_id:
+                    drone_port = drone['listens']
+                    break
+        except:
+            print("ERRROR")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.connect((HOST, drone_port))
+            s.sendall("FLY".encode())
+            print("FLY enviado")
+        except:
+            print("ERROR: ET y dron no conectados")
+
+        
+def send_land(drone_id):
+    with open("db/drones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+            for drone in data:
+                if drone['id'] == drone_id:
+                    drone_port = drone['listens']
+                    break
+        except:
+            print("ERRROR")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.connect((HOST, drone_port))
+            s.sendall("LAND".encode())
+            print("LAND enviado")
+        except:
+            print("ERROR: ET y dron no conectados")
+
+
+def send_disconnect(drone_id):
+    with open("db/drones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+            for drone in data:
+                if drone['id'] == drone_id:
+                    drone_port = drone['listens']
+                    break
+        except:
+            print("ERRROR")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.connect((HOST, drone_port))
+            s.sendall("DISCONNECT".encode())
+            print("DISCONNECT enviado")
+        except:
+            print("ERROR: ET y dron no conectados")
+        
+       
 
 if __name__ == "__main__":
     main()
