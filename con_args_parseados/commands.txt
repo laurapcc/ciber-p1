@@ -1,0 +1,6 @@
+--fly --drone_id drone01
+--land --drone_id drone01
+--disconnect --drone_id drone01
+--disconnect --et_id et01
+--connect --et_id et01
+--link --et_id et01

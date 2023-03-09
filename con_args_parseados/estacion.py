@@ -84,9 +84,9 @@ def main():
     x.daemon = True
     x.start()
     
-    x = threading.Thread(target=recv_thread_bo, args=(args.et_id,))
-    x.daemon = True
-    x.start()
+    #x = threading.Thread(target=recv_thread_bo, args=(args.et_id,))
+    #x.daemon = True
+    #x.start()
 
     command = input("Comando: ")
     while True:
@@ -349,13 +349,13 @@ def recv_thread_et(et_id):
                         data = conn.recv(1024)
                         if not data: break
                         msg = data.decode()
-                        print("Mensaje recibido: " + msg)
-                        if msg == "fly":
-                            send_fly(et_id)
-                        elif msg == "land":
-                            send_land(et_id)
-                        else:
-                            print("Mensaje recibido: " + msg)
+                        print("Telemtery: " + msg)
+                        #if msg == "fly":
+                        #    send_fly(et_id)
+                        #elif msg == "land":
+                        #    send_land(et_id)
+                        #else:
+                        #    print("Mensaje recibido: " + msg)
 
 def send_msg(bo, et_id, msg):
     print('TODO: send_msg con espacios')
@@ -426,17 +426,18 @@ def send_file(bo, et_id, file):
         shutil.copyfile(file, et_route + file_name)
 
 
-def send_fly(et_id):
-    with open("db/estaciones.json", "r") as jsonFile:
-        try:
-            data = json.load(jsonFile)
-            for et in data:
-                if et['id'] == et_id:
-                    drone_id = drone['connected']
-                    break
-                return
-        except:
-            print("ERROR")
+def send_fly(drone_id):
+    #with open("db/estaciones.json", "r") as jsonFile:
+    #    try:
+    #        data = json.load(jsonFile)
+    #        for et in data:
+    #            if et['id'] == et_id:
+    #                drone_id = drone['connected']
+    #                break
+    #            return
+    #    except:
+    #        print("ERROR")
+
 
     with open("db/drones.json", "r") as jsonFile:
         try:
@@ -458,17 +459,17 @@ def send_fly(et_id):
             print("ERROR: ET y dron no conectados")
 
         
-def send_land(et_id):
-    with open("db/estaciones.json", "r") as jsonFile:
-        try:
-            data = json.load(jsonFile)
-            for et in data:
-                if et['id'] == et_id:
-                    drone_id = drone['connected']
-                    break
-                return
-        except:
-            print("ERROR")
+def send_land(drone_id):
+    #with open("db/estaciones.json", "r") as jsonFile:
+    #    try:
+    #        data = json.load(jsonFile)
+    #        for et in data:
+    #            if et['id'] == et_id:
+    #                drone_id = drone['connected']
+    #                break
+    #            return
+    #    except:
+    #        print("ERROR")
 
     with open("db/drones.json", "r") as jsonFile:
         try:

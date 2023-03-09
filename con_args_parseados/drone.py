@@ -2,6 +2,7 @@ import argparse
 import json
 from json.decoder import JSONDecodeError
 import os
+import select
 import socket
 import threading
 import time
@@ -12,7 +13,6 @@ HOST = "127.0.0.1"
 PORT = 65300
 
 # FLYING o LAND
-# o DISCONNECTING
 STATUS = "LAND"
 BATTERY = 100
 FLY_START_TIME = -1
@@ -49,6 +49,7 @@ def main():
     parser.add_argument('--link', action='store_true', dest='link', default=False, help='LINK dron -/-> estacion de tierra')
     parser.add_argument('--unlink', action='store_true', dest='unlink', default=False, help='UNLINK dron -/-> estacion de tierra')
     parser.add_argument('--connect', action='store_true', dest='connect', default=False, help='CONNECT dron -> estacion de tierra')
+    parser.add_argument('--disconnect', action='store_true', dest='disconnect', default=False, help='DISCONNECT dron -> estacion de tierra')
 
     # IDs
     parser.add_argument('--drone_id', dest='drone_id', default=False, help='ID de dron')
@@ -99,6 +100,13 @@ def main():
             print("CONNECT")
             if args.et_id:
                 connect_drone_et(drone_id, args.et_id)
+            else:
+                print("ERROR: Debes proporcionar un et_id")
+        
+        elif args.disconnect:
+            print("DISCONNECT")
+            if args.et_id:
+                disconnect(drone_id, args.et_id)
             else:
                 print("ERROR: Debes proporcionar un et_id")
 
@@ -257,6 +265,7 @@ def connect_drone_et(drone_id, et_id):
 
     # comprobar que drone y et estan linkeados
     listen_port = check_linked(drone_id, et_id)
+    print("listen_port: ", listen_port)
     if not listen_port:
         print("ERROR: drone con id", drone_id, "y estacion con id", et_id, "no estan linkeados")
         return
@@ -281,38 +290,49 @@ def connect_drone_et(drone_id, et_id):
     CONNECTED = True
 
     # Crear thread para escuchar comandos por terminal
-    terminal_thread = threading.Thread(target=terminal)
-    terminal_thread.daemon = True
+    #terminal_thread = threading.Thread(target=terminal)
+    #terminal_thread.daemon = True
 
     # lanzar operaciones del dron 
     telemetry_thread.start()
-    terminal_thread.start()
-    listen_to_et(drone_id, et_id, listen_port)
+    #terminal_thread.start()
+
+    # thread para escuchar comandos de la ET
+    listen_thread = threading.Thread(target=listen_to_et, args=(drone_id, et_id, listen_port,))
+    listen_thread.daemon = True
+    listen_thread.start()
+    #listen_to_et(drone_id, et_id, listen_port)
 
 
-def listen_to_et(drone_id, et_id, listen_port):
+def listen_to_et(drone_id, et_id, listen_port):    
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, listen_port))
         s.listen(1)
-        while True:
-            conn, addr = s.accept()
-            with conn:
-                msg = b''
-                while True:
-                    data = conn.recv(1024)
-                    if not data: break
-                    msg += data
+        while CONNECTED:
+            r, _, _ = select.select([s, CONNECTED], [], [], None)
+            if s in r:
+                conn, addr = s.accept()
+                with conn:
+                    msg = b''
+                    while True:
+                        data = conn.recv(1024)
+                        if not data: break
+                        msg += data
 
-                msg = msg.decode()
-                if msg == "FLY":
-                    fly()
+                    msg = msg.decode()
+                    if msg == "FLY":
+                        fly()
 
-                elif msg == "LAND":
-                    land()
+                    elif msg == "LAND":
+                        land()
+                    
+                    elif msg == "DISCONNECT":
+                        disconnect(et_id, drone_id)
+
+            if not CONNECTED:
+                break
                 
-                elif msg == "DISCONNECT":
-                    disconnect()
-                    break
+        print("Conexion con ET", et_id, "finalizada")
 
 
 def fly():
@@ -345,13 +365,31 @@ def land():
     STATUS = "LAND"
 
 
-def disconnect():
+def disconnect(et_id, drone_id):
     global CONNECTED
-    global LAND
+    global BATTERY
+
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+            for et in data:
+                if et["id"] == et_id:
+                    print("Disconnect tag:", et["connected"])
+                    del et["connected"]
+                    break
+
+        except JSONDecodeError:
+            print("ERROR")
+            return
+        
+    with open("db/estaciones.json", "w") as jsonFile:
+        json.dump(data, jsonFile)
 
     if STATUS != "LAND":
         land()
+
     CONNECTED = False
+    BATTERY = 100
     
 
 
@@ -374,13 +412,14 @@ def telemetry(drone_id, et_port):
                 return
             time.sleep(2)
 
+        print("Telemetry thread finished")
+
 
 def telemetry_msg(drone_id):
     global BATTERY
     global LAST_TELEMETRY
     global STATUS
 
-    disconnecting = True if STATUS == "DISCONNECTING" else False
     if STATUS == "FLYING":
         time_elapsed = time.time() - LAST_TELEMETRY
         LAST_TELEMETRY = time.time()
@@ -389,29 +428,14 @@ def telemetry_msg(drone_id):
             BATTERY = 0.0
             land()
 
-    STATUS = "LAND" if disconnecting else STATUS
 
     msg = {
-        "disconnecting": disconnecting,
         "drone_id": drone_id,
         "status": STATUS,
         "battery": BATTERY
     }
     return json.dumps(msg)
     
-
-def terminal():
-    global CONNECTED
-    global STATUS
-    
-    command = input()
-    while CONNECTED:
-        if command == "--disconnect":
-            STATUS = "DISCONNECTING"
-            break
-        command = input()
-        
-
 
 if __name__ == "__main__":
     main()
