@@ -80,14 +80,23 @@ def main():
         print("ERROR: primero debes registrar la estacion")
         return
 
-    x = threading.Thread(target=recv_thread, args=(args.et_id,))
+    x = threading.Thread(target=recv_thread_et, args=(args.et_id,))
     x.daemon = True
     x.start()
     
+    x = threading.Thread(target=recv_thread_bo, args=(args.et_id,))
+    x.daemon = True
+    x.start()
 
     command = input("Comando: ")
     while True:
         try:
+            #Para que el mensaje pueda contener espacios lo recogemos como todo el texto entre comillas, suponiendo que no habra otro texto entre comillas
+            i = command.index('"')
+            j = command.index('"', i+1)
+            args = parser.parse_args(command.split()) 
+            args.msg = command[i+1,j]
+        except ValueError:
             args = parser.parse_args(command.split()) 
         except:
             print("ERROR: Comando no reconocido")
@@ -184,7 +193,7 @@ def registered(et_id):
     
     return False
 
-
+#TODO: añadir puerto para escuchar a la bo
 def register_estacion(et_id):
     with open("db/estaciones.json", "r") as jsonFile:
         try:
@@ -198,13 +207,13 @@ def register_estacion(et_id):
 
                 # Añadir nueva estacion con puertos libres
                 maxPort = max([et["listens_bo"] for et in data])
-                data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "connected_drones": [], "files": "ets/" + et_id + "/files/"})
+                data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "files": "ets/" + et_id + "/files/"})
             # Caso en que en el json hay una lista vacia
             else:
-                data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "connected_drones": [], "files": "ets/" + et_id + "/files/"}]
+                data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
         except JSONDecodeError:
             # Primera entrada del json
-            data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "connected_drones": [], "files": "ets/" + et_id + "/files/"}]
+            data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
 
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
@@ -250,8 +259,7 @@ def link_drone_et(drone_id, et_id):
 
         for drone in data:
             if drone["id"] == drone_id:
-                drone["linked_ets"].append(et_id)
-                break
+                drone["linked_ets"].append(et_id) if et_id not in drone["linked_ets"] else drone["linked_ets"]
 
     with open("db/drones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
@@ -263,7 +271,7 @@ def link_drone_et(drone_id, et_id):
         for et in data:
             if et["id"] == et_id:
                 try:
-                    et["linked_drones"].append(drone_id)
+                    et["linked_drones"].append(drone_id) if drone_id not in et["linked_drones"] else et["linked_drones"]
                 except:
                     et["linked_drones"] = [drone_id]
                 break
@@ -313,7 +321,7 @@ def unlink_drone_et(drone_id, et_id):
     print("UNLINK completado con exito: dron", drone_id, "ahora ya no esta linkeado a la estacion de tierra", et_id)
 
 
-def recv_thread(et_id):
+def recv_thread_et(et_id):
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -340,7 +348,14 @@ def recv_thread(et_id):
                     while True:
                         data = conn.recv(1024)
                         if not data: break
-                        print(data.decode())
+                        msg = data.decode()
+                        print("Mensaje recibido: " + msg)
+                        if msg == "fly":
+                            send_fly(et_id)
+                        elif msg == "land":
+                            send_land(et_id)
+                        else:
+                            print("Mensaje recibido: " + msg)
 
 def send_msg(bo, et_id, msg):
     print('TODO: send_msg con espacios')
@@ -411,7 +426,18 @@ def send_file(bo, et_id, file):
         shutil.copyfile(file, et_route + file_name)
 
 
-def send_fly(drone_id):
+def send_fly(et_id):
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+            for et in data:
+                if et['id'] == et_id:
+                    drone_id = drone['connected']
+                    break
+                return
+        except:
+            print("ERROR")
+
     with open("db/drones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -419,6 +445,7 @@ def send_fly(drone_id):
                 if drone['id'] == drone_id:
                     drone_port = drone['listens']
                     break
+                return
         except:
             print("ERRROR")
 
@@ -431,7 +458,18 @@ def send_fly(drone_id):
             print("ERROR: ET y dron no conectados")
 
         
-def send_land(drone_id):
+def send_land(et_id):
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+            for et in data:
+                if et['id'] == et_id:
+                    drone_id = drone['connected']
+                    break
+                return
+        except:
+            print("ERROR")
+
     with open("db/drones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -439,8 +477,10 @@ def send_land(drone_id):
                 if drone['id'] == drone_id:
                     drone_port = drone['listens']
                     break
+                return
         except:
             print("ERRROR")
+            return
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
@@ -459,8 +499,10 @@ def send_disconnect(drone_id):
                 if drone['id'] == drone_id:
                     drone_port = drone['listens']
                     break
+                return 
         except:
             print("ERRROR")
+            return
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:

@@ -36,8 +36,8 @@ def main():
     # Funciones
     parser.add_argument('--send_msg', action='store_true', dest='send_msg', default=False, help='Envio de mensaje')
     parser.add_argument('--send_file', action='store_true', dest='send_file', default=False, help='Envio de fichero')
-    parser.add_argument('--FLY', action='store_true', dest='fly', default=False, help='Despegar dron')
-    parser.add_argument('--LAND', action='store_true', dest='land', default=False, help='Aterrizar dron')
+    parser.add_argument('--fly', action='store_true', dest='fly', default=False, help='Despegar dron')
+    parser.add_argument('--land', action='store_true', dest='land', default=False, help='Aterrizar dron')
     parser.add_argument('--get_status', action='store_true', dest='get_status', default=False, help='Obtener estado de todos los sistemas')
     parser.add_argument('--shutdown', action='store_true', dest='shutdown', default=False, help='Apagar el sistema por completo')
 
@@ -74,8 +74,15 @@ def main():
     x.start()
 
     command = input("Comando: ")
+    #TODO: Si llega un comando raro solucionar los except para que no se cierre
     while True:
         try:
+            #Para que el mensaje pueda contener espacios lo recogemos como todo el texto entre comillas, suponiendo que no habra otro texto entre comillas
+            i = command.index('"')
+            j = command.index('"', i+1)
+            args = parser.parse_args(command.split()) 
+            args.msg = command[i+1,j]
+        except ValueError:
             args = parser.parse_args(command.split()) 
         except:
             print("ERROR: Comando no reconocido")
@@ -232,10 +239,39 @@ def send_file(et_id, file):
     shutil.copyfile(file, et_route + file_name)
 
 def fly(drone_id):
-    print('TODO: fly')
+    with open("db/estaciones.json", "r") as jsonFile:
+        try: 
+            data = json.load(jsonFile)
+
+            for et in data:
+                if et["connected"] == drone_id:
+                    et_port = et["listens_bo"]      
+        except JSONDecodeError:
+            print("Error")
+            return
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, et_port))
+        s.sendall("fly".encode())
+        print("FLY enviado")
+    return
+    
 
 def land(drone_id):
-    print('TODO: land')
+    with open("db/estaciones.json", "r") as jsonFile:
+        try: 
+            data = json.load(jsonFile)
+
+            for et in data:
+                if et["connected"] == drone_id:
+                    et_port = et["listens_bo"]      
+        except JSONDecodeError:
+            print("Error")
+            return
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, et_port))
+        s.sendall("land".encode())
+        print("LAND enviado")
+    return
 
 def get_status():
     print('TODO: get_status')

@@ -12,9 +12,12 @@ HOST = "127.0.0.1"
 PORT = 65300
 
 # FLYING o LAND
+# o DISCONNECTING
 STATUS = "LAND"
 BATTERY = 100
 FLY_START_TIME = -1
+
+CONNECTED = False
 
 
 descripcion = "Envia un comando a un dron"
@@ -70,7 +73,8 @@ def main():
     command = input("Comando: ")
     while True:
         try:
-            args = parser.parse_args(command.split()) 
+            args = parser.parse_args(command.split())
+            
         except:
             print("ERROR: Comando no reconocido")
             parser.print_help()
@@ -95,16 +99,6 @@ def main():
             print("CONNECT")
             if args.et_id:
                 connect_drone_et(drone_id, args.et_id)
-                # comprobar que drone y et estan linkeados
-                listen_port = check_linked(drone_id, args.et_id)
-                print(listen_port)
-                if not listen_port:
-                    print("ERROR: drone con id", drone_id, "y estacion con id", args.et_id, "no estan linkeados")
-                else:
-                    telemetry_thread = threading.Thread(target=telemetry, args=(drone_id, listen_port-1,))
-                    telemetry_thread.daemon = True
-                    telemetry_thread.start()
-                    listen_to_et(listen_port)
             else:
                 print("ERROR: Debes proporcionar un et_id")
 
@@ -132,14 +126,14 @@ def register_drone(drone_id):
             # Añadir nuevo drone con un puerto libre
             if data:
                 maxPort = max([drone["listens"] for drone in data])
-                data.append({"id": drone_id, "listens": maxPort+2, "linked_ets": [], "connected_et": ""})
+                data.append({"id": drone_id, "listens": maxPort+2, "linked_ets": []})
             # Caso en que la lista en el json esta vacia pero existe
             else:
-                data = [{"id": drone_id, "listens": 64001, "linked_ets": [], "connected_et": ""}]
+                data = [{"id": drone_id, "listens": 64001, "linked_ets": []}]
 
         except JSONDecodeError:
             # Primera entrada del json
-            data = [{"id": drone_id, "listens": 64001, "linked_ets": [], "connected_et": ""}]
+            data = [{"id": drone_id, "listens": 64001, "linked_ets": []}]
 
     with open("db/drones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
@@ -184,7 +178,7 @@ def link_drone_et(drone_id, et_id):
 
         for drone in data:
             if drone["id"] == drone_id:
-                drone["linked_ets"].append(et_id)
+                drone["linked_ets"].append(et_id) if et_id not in drone["linked_ets"] else drone["linked_ets"]
                 break
 
     with open("db/drones.json", "w") as jsonFile:
@@ -196,7 +190,7 @@ def link_drone_et(drone_id, et_id):
 
         for et in data:
             if et["id"] == et_id:
-                et["linked_drones"].append(drone_id)
+                et["linked_drones"].append(drone_id) if drone_id not in et["linked_drones"] else et["linked_drones"]
                 break
 
     with open("db/estaciones.json", "w") as jsonFile:
@@ -259,40 +253,40 @@ def check_linked(drone_id, et_id):
 
 
 def connect_drone_et(drone_id, et_id):
+    global CONNECTED
+
     # comprobar que drone y et estan linkeados
     listen_port = check_linked(drone_id, et_id)
     if not listen_port:
         print("ERROR: drone con id", drone_id, "y estacion con id", et_id, "no estan linkeados")
         return
-
-
-    with open("db/drones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
-
-        for drone in data:
-            if drone["id"] == drone_id:
-                drone["connected_et"] = et_id
-                break
-    with open("db/drones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
-
+    
     with open("db/estaciones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
-
-        for et in data:
-            if et["id"] == et_id:
-                et["connected_drones"].append(drone_id)
-                break
-
+        try:
+            data = json.load(jsonFile)
+            print(et_id)
+            for el in data:
+                if el["id"] == et_id:
+                    el["connected"] = drone_id
+        except JSONDecodeError:
+            print("ERROR")
+            return
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
-
-
     
-    # Enviar telemetry y escichar comando de la ET
+            
+    # Enviar telemetry y escuchar comando de la ET
     telemetry_thread = threading.Thread(target=telemetry, args=(drone_id, listen_port-1,))
     telemetry_thread.daemon = True
+    CONNECTED = True
+
+    # Crear thread para escuchar comandos por terminal
+    terminal_thread = threading.Thread(target=terminal)
+    terminal_thread.daemon = True
+
+    # lanzar operaciones del dron 
     telemetry_thread.start()
+    terminal_thread.start()
     listen_to_et(drone_id, et_id, listen_port)
 
 
@@ -317,7 +311,7 @@ def listen_to_et(drone_id, et_id, listen_port):
                     land()
                 
                 elif msg == "DISCONNECT":
-                    disconnect(drone_id, et_id)
+                    disconnect()
                     break
 
 
@@ -351,50 +345,26 @@ def land():
     STATUS = "LAND"
 
 
-def disconnect(drone_id, et_id):
-    with open("db/drones.json", "r") as jsonFile:
-        try:
-            data = json.load(jsonFile)
-            for drone in data:
-                if drone["id"] == drone_id:
-                    try:
-                        drone["connected_et"] = ""
-                    except:
-                        print("ET y drone no estaban conectados")
-                    break
+def disconnect():
+    global CONNECTED
+    global LAND
 
-        except JSONDecodeError:
-            print("ERROR")
-            return
+    if STATUS != "LAND":
+        land()
+    CONNECTED = False
     
-    with open("db/drones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
-
-    
-    with open("db/estaciones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
-
-        for et in data:
-            if et["id"] == et_id:
-                try:
-                    et["connected_droned"].remove(drone_id)
-                except:
-                    print("ET y drone no estaban linkeados")
-                break
-
-    with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
 
 
 def telemetry(drone_id, et_port):
-    flag = 0
+    global CONNECTED
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.connect((HOST, et_port))
         except:
             print("ERROR: No se pudo conectar con la estacion de tierra")
-            flag = 1 # NOTA: esta flag es inutil. se hace un return y ya estaría
-        while True and not flag:
+            return
+            
+        while CONNECTED:
             msg = telemetry_msg(drone_id)
             print(msg)
             try:
@@ -409,6 +379,8 @@ def telemetry_msg(drone_id):
     global BATTERY
     global LAST_TELEMETRY
     global STATUS
+
+    disconnecting = True if STATUS == "DISCONNECTING" else False
     if STATUS == "FLYING":
         time_elapsed = time.time() - LAST_TELEMETRY
         LAST_TELEMETRY = time.time()
@@ -417,13 +389,29 @@ def telemetry_msg(drone_id):
             BATTERY = 0.0
             land()
 
+    STATUS = "LAND" if disconnecting else STATUS
+
     msg = {
+        "disconnecting": disconnecting,
         "drone_id": drone_id,
         "status": STATUS,
         "battery": BATTERY
     }
-
     return json.dumps(msg)
+    
+
+def terminal():
+    global CONNECTED
+    global STATUS
+    
+    command = input()
+    while CONNECTED:
+        if command == "--disconnect":
+            STATUS = "DISCONNECTING"
+            break
+        command = input()
+        
+
 
 if __name__ == "__main__":
     main()
