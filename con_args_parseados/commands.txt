@@ -1,6 +1,33 @@
+Enviar desde DRONE a ET:
+
+--register --drone_id drone01
+--link --et_id et01
+--unlink --et_id et01
+--connect --et_id et01
+--disconnect --et_id et01
+
+
+Enviar desde ET a DRONE:
+
+--register --et_id et01
+--link --drone_id drone01
+--unlink --drone_id drone01
 --fly --drone_id drone01
 --land --drone_id drone01
 --disconnect --drone_id drone01
---disconnect --et_id et01
---connect --et_id et01
---link --et_id et01
+
+
+Enviar desde ET a BO:
+
+--send_msg --info_to_bo --msg "holaa BO, que tal?"
+--send_file --info_to_bo --file test.txt
+
+
+Enviar desde BO:
+
+--send_msg --et_id et01 --msg "holaa ET-1, que tal?"
+--send_file --et_id et01 --file test.txt
+--fly --drone_id drone01
+--land --drone_id drone01
+--get_status
+--shutdown

@@ -8,6 +8,12 @@ import threading
 import time
 import atexit
 
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+
+
 
 HOST = "127.0.0.1"
 PORT = 65300
@@ -18,6 +24,8 @@ BATTERY = 100
 FLY_START_TIME = -1
 
 CONNECTED = False
+
+private_key = None
 
 
 descripcion = "Envia un comando a un dron"
@@ -121,6 +129,12 @@ def main():
 
 
 def register_drone(drone_id):
+    global private_key
+
+    # Crear clave publica y privada
+    key = RSA.generate(2048)
+    private_key = key.export_key().decode('utf-8')
+
     with open("db/drones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -134,19 +148,19 @@ def register_drone(drone_id):
             # Añadir nuevo drone con un puerto libre
             if data:
                 maxPort = max([drone["listens"] for drone in data])
-                data.append({"id": drone_id, "listens": maxPort+2, "linked_ets": []})
+                data.append({"id": drone_id, "listens": maxPort+2, "linked_ets": [], "public_key": key.publickey().export_key().decode("utf-8")})
             # Caso en que la lista en el json esta vacia pero existe
             else:
-                data = [{"id": drone_id, "listens": 64001, "linked_ets": []}]
+                data = [{"id": drone_id, "listens": 64001, "linked_ets": [], "public_key": key.publickey().export_key().decode("utf-8")}]
 
         except JSONDecodeError:
             # Primera entrada del json
-            data = [{"id": drone_id, "listens": 64001, "linked_ets": []}]
+            data = [{"id": drone_id, "listens": 64001, "linked_ets": [], "public_key": key.publickey().export_key().decode("utf-8")}]
 
     with open("db/drones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
     
-    print("REGISTEER completado con exito: drone registrado con ID:", drone_id)
+    print("REGISTER completado con exito: drone registrado con ID:", drone_id)
 
 #TODO: comprobar que no estan ya linkeados
 def link_drone_et(drone_id, et_id):
@@ -269,6 +283,10 @@ def connect_drone_et(drone_id, et_id):
     if not listen_port:
         print("ERROR: drone con id", drone_id, "y estacion con id", et_id, "no estan linkeados")
         return
+
+    # crear clave de sesion
+    session_key = os.urandom(32)
+    print("session_key: ", session_key)
     
     with open("db/estaciones.json", "r") as jsonFile:
         try:
@@ -277,11 +295,31 @@ def connect_drone_et(drone_id, et_id):
             for el in data:
                 if el["id"] == et_id:
                     el["connected"] = drone_id
+                    et_public_key = el["public_key"]
         except JSONDecodeError:
             print("ERROR")
             return
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
+
+    
+    # enviar la clave de sesion encriptada con la clave publica de la ET
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.connect((HOST, listen_port-1))
+        except:
+            print("ERROR: No se pudo conectar con la estacion de tierra")
+            return
+        
+        cipher = PKCS1_OAEP.new(RSA.import_key(et_public_key))
+        cipher_msg = cipher.encrypt(session_key)
+        try:
+            s.sendall(cipher_msg)
+        except:
+            print("ERROR while sending session key")
+            return
+
+    time.sleep(0.05)
     
             
     # Enviar telemetry y escuchar comando de la ET
@@ -395,6 +433,8 @@ def disconnect(et_id, drone_id):
 
 def telemetry(drone_id, et_port):
     global CONNECTED
+
+    print("Telemetry thread started")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.connect((HOST, et_port))

@@ -6,9 +6,18 @@ import threading
 import os
 import shutil
 import atexit
+import time
+
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+
 
 HOST = "127.0.0.1"
 DRONE_PORT = 65300
+
+private_key = None
 
 
 descripcion = "Estacion de tierra"
@@ -195,6 +204,12 @@ def registered(et_id):
 
 #TODO: añadir puerto para escuchar a la bo
 def register_estacion(et_id):
+    global private_key
+
+    # Crear clave publica y privada
+    key = RSA.generate(2048)
+    private_key = key.export_key().decode('utf-8')
+
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -207,13 +222,13 @@ def register_estacion(et_id):
 
                 # Añadir nueva estacion con puertos libres
                 maxPort = max([et["listens_bo"] for et in data])
-                data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "files": "ets/" + et_id + "/files/"})
+                data.append({"id": et_id, "listens_bo": maxPort+1, "linked_drones": [], "files": "ets/" + et_id + "/files/", "public_key": key.publickey().export_key().decode("utf-8")})
             # Caso en que en el json hay una lista vacia
             else:
-                data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
+                data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/", "public_key": key.publickey().export_key().decode("utf-8")}]
         except JSONDecodeError:
             # Primera entrada del json
-            data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/"}]
+            data = [{"id": et_id, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/", "public_key": key.publickey().export_key().decode("utf-8")}]
 
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(data, jsonFile)
@@ -322,6 +337,20 @@ def unlink_drone_et(drone_id, et_id):
 
 
 def recv_thread_et(et_id):
+    def recvall(sock):
+        BUFF_SIZE = 4096 # 4 KiB
+        fragments = []
+        while True: 
+            chunk = sock.recv(BUFF_SIZE)
+            fragments.append(chunk)
+            # if the following line is removed, data is omitted
+            time.sleep(0.005)
+            if len(chunk) < BUFF_SIZE: 
+                break
+            
+        data = b''.join(fragments)
+        return data
+        
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -338,9 +367,24 @@ def recv_thread_et(et_id):
             print("ERROR: No hay estaciones de tierra")
             return
 
+    # recibir clave de session cifrada
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((HOST, et_port))
             s.listen(1)
+            conn, addr = s.accept()
+            with conn:
+                data = conn.recv(1024)
+                cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
+                session_key = cipher.decrypt(data)
+                print("Clave de sesion recibida")
+                print(session_key)
+
+    # escuchar telemetry         
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((HOST, et_port))
+            print("Escuchando en puerto", et_port)
+            s.listen(1)
+            print("Escuchando en puerto", et_port)
             while True:
                 conn, addr = s.accept()
                 with conn:
@@ -349,7 +393,7 @@ def recv_thread_et(et_id):
                         data = conn.recv(1024)
                         if not data: break
                         msg = data.decode()
-                        print("Telemtery: " + msg)
+                        print("Telemetry: " + msg)
                         #if msg == "fly":
                         #    send_fly(et_id)
                         #elif msg == "land":
