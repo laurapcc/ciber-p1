@@ -6,6 +6,7 @@ import shutil
 import os
 import threading
 import atexit
+import time
 
 HOST = "127.0.0.1"
 PORT = 65300
@@ -250,7 +251,7 @@ def fly(drone_id):
             print("Error")
             return
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, et_port))
+        s.connect((HOST, et_port + 100))
         s.sendall("fly".encode())
         print("FLY enviado")
     return
@@ -274,10 +275,36 @@ def land(drone_id):
     return
 
 def get_status():
-    print('TODO: get_status')
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            for el in data:
+                et_port = el["listens"] + 100
+        except:
+            pass
+
 
 def shutdown():
-    print('TODO: shutdown')
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            for el in data:
+                et_port = el["listens_bo"] + 100
+                send_kill(et_port)
+        except JSONDecodeError:
+            print("Error en shutdown")
+    return
+
+
+def send_kill(et_port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, et_port))
+        s.sendall("kill".encode())
+        print("SHUTDOWN enviado")
+    exit_handler()
+    return
 
 if __name__ == "__main__":
     main()

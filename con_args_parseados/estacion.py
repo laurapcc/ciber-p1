@@ -92,10 +92,9 @@ def main():
     x = threading.Thread(target=recv_thread_et, args=(args.et_id,))
     x.daemon = True
     x.start()
-    
-    #x = threading.Thread(target=recv_thread_bo, args=(args.et_id,))
-    #x.daemon = True
-    #x.start()
+    y = threading.Thread(target=recv_thread_bo, args=(args.et_id,))
+    y.daemon = True
+    y.start()
 
     command = input("Comando: ")
     while True:
@@ -335,6 +334,64 @@ def unlink_drone_et(drone_id, et_id):
 
     print("UNLINK completado con exito: dron", drone_id, "ahora ya no esta linkeado a la estacion de tierra", et_id)
 
+def get_drone_id(et_id):
+    with open("db/estaciones.json", "r") as jsonFile:
+        data = json.load(jsonFile)
+
+        for et in data:
+            if et["id"] == et_id:
+                try:
+                    drone_id = et["connected"]
+                except:
+                    print("ET y drone no estaban linkeados")
+                break
+    return drone_id
+
+def get_et_port(et_id):
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            et_port = 0
+            for el in data:
+                if el['id'] == et_id:
+                    et_port = el['listens_bo']
+            if not et_port:
+                print("ERROR: la estacion de tierra con ID: " + et_id + " no está registrada")
+
+        except JSONDecodeError:
+            print("ERROR: No hay estaciones de tierra")
+            return
+    return et_port
+
+def recv_thread_bo(et_id):
+    et_port = get_et_port(et_id)
+    print("thread bo iniciado")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((HOST, et_port + 100))
+            print("Escuchando en puerto", et_port+100)
+            s.listen(1)
+            print("Escuchando en puerto", et_port+100)
+            while True:
+                time.sleep(0.5)
+                conn, addr = s.accept()
+                print(HOST, et_port)
+                with conn:
+                    print('Connected by', addr)
+                    while True:
+                        data = conn.recv(1024)
+                        if not data: break
+                        msg = data.decode(errors='ignore')
+                        print(msg)
+                        drone_id = get_drone_id(et_id)
+                        if msg == 'fly':
+                            send_fly(drone_id)
+                        elif msg == 'land':
+                            send_land(drone_id)
+                        elif msg == 'kill':
+                            kill_drone(et_id)
+                            exit_handler()
+
 
 def recv_thread_et(et_id):
     def recvall(sock):
@@ -386,20 +443,17 @@ def recv_thread_et(et_id):
             s.listen(1)
             print("Escuchando en puerto", et_port)
             while True:
+                time.sleep(0.5)
                 conn, addr = s.accept()
+                print(HOST, et_port)
                 with conn:
                     print('Connected by', addr)
                     while True:
                         data = conn.recv(1024)
                         if not data: break
-                        msg = data.decode()
+                        msg = data.decode(errors='ignore')
                         print("Telemetry: " + msg)
-                        #if msg == "fly":
-                        #    send_fly(et_id)
-                        #elif msg == "land":
-                        #    send_land(et_id)
-                        #else:
-                        #    print("Mensaje recibido: " + msg)
+                        
 
 def send_msg(bo, et_id, msg):
     print('TODO: send_msg con espacios')
@@ -468,6 +522,30 @@ def send_file(bo, et_id, file):
                 return
         os.makedirs(os.path.dirname(et_route), exist_ok=True)
         shutil.copyfile(file, et_route + file_name)
+
+def get_drone_port(drone_id):
+    with open("db/drones.json", "r") as jsonFile:
+        try: 
+            data = json.load(jsonFile)
+            for el in data:
+                if el["drone_id"] == drone_id:
+                    drone_port = el["listens"]
+            return drone_port
+        except JSONDecodeError:
+            print("ERROR buscando puerto de dron")
+
+
+def kill_drone(et_id):
+    drone_id = get_drone_id(et_id)
+    drone_port = get_drone_port(drone_id)
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, drone_port))
+        s.sendall("kill".encode())
+        print("SHUTDOWN enviado")
+    return
+
+
 
 
 def send_fly(drone_id):

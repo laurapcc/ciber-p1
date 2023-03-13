@@ -273,7 +273,6 @@ def check_linked(drone_id, et_id):
 
     return False
 
-
 def connect_drone_et(drone_id, et_id):
     global CONNECTED
 
@@ -319,7 +318,7 @@ def connect_drone_et(drone_id, et_id):
             print("ERROR while sending session key")
             return
 
-    time.sleep(0.05)
+    time.sleep(0.1)
     
             
     # Enviar telemetry y escuchar comando de la ET
@@ -366,6 +365,9 @@ def listen_to_et(drone_id, et_id, listen_port):
                     
                     elif msg == "DISCONNECT":
                         disconnect(et_id, drone_id)
+                    
+                    elif msg == "kill":
+                        exit_handler()
 
             if not CONNECTED:
                 break
@@ -438,6 +440,7 @@ def telemetry(drone_id, et_port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.connect((HOST, et_port))
+            print(HOST, et_port)
         except:
             print("ERROR: No se pudo conectar con la estacion de tierra")
             return
@@ -446,12 +449,13 @@ def telemetry(drone_id, et_port):
             msg = telemetry_msg(drone_id)
             print(msg)
             try:
-                s.sendall(msg.encode())
-            except:
+                s.sendall(msg.encode(errors='ignore'))
+            except Exception as e:
                 print("ERROR while sending telemetry")
+                print(e)
                 return
             time.sleep(2)
-
+        s.shutdown(socket.SHUT_RDWR)
         print("Telemetry thread finished")
 
 
