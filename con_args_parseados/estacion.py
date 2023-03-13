@@ -113,8 +113,6 @@ def main():
             command = input("Comando: ")
             continue
 
-        ## NOTA : si se ha llegado hasta aqui es porquue la et se ha registrado
-        ## if registered(et_id):
         if args.send_msg:
             print("SEND MESSAGE")
             if (args.et_id or args.bo) and args.msg:
@@ -144,14 +142,6 @@ def main():
                 unlink_drone_et(args.drone_id, et_id)
             else:
                 print("ERROR: Debes proporcionar un drone_id")
-
-        # NOTA: la et no hace connect
-        #elif args.connect:
-        #    print("CONNECT")
-        #    if args.drone_id:
-        #        print("drone_id:", args.drone_id)
-        #    else:
-        #        print("ERROR: Debes proporcionar un drone_id")
 
         elif args.fly:
             print("FLY")
@@ -201,6 +191,7 @@ def registered(et_id):
             print("ERROR: no hay entradas registradas")
     
     return False
+
 
 #TODO: añadir puerto para escuchar a la bo
 def register_estacion(et_id):

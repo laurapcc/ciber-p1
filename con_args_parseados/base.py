@@ -8,6 +8,12 @@ import threading
 import atexit
 import time
 
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+
+
 HOST = "127.0.0.1"
 PORT = 65300
 
@@ -49,7 +55,9 @@ def main():
     parser.add_argument('--msg', dest='msg', default=False, help='Mensaje a enviar')
     parser.add_argument('--file', dest='file', default=False, help='Fichero a enviar')
 
-    ##TODO: Alguna estrucura especial para los IDs?? Regex???
+    # crear clave publica y privada
+    key = RSA.generate(2048)
+    private_key = key.export_key().decode('utf-8')
 
     try:
         jsonFile = open("db/base.json", "r")
@@ -61,7 +69,7 @@ def main():
 
     except (JSONDecodeError, OSError):
         # Primera entrada del json
-        data = [{"status": "active", "port": PORT}]
+        data = [{"status": "active", "port": PORT, "public_key": key.publickey().export_key().decode("utf-8")}]
 
         with open("db/base.json", "w+") as jsonFile:
             json.dump(data, jsonFile)

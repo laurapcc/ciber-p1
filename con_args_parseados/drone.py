@@ -325,14 +325,7 @@ def connect_drone_et(drone_id, et_id):
     telemetry_thread = threading.Thread(target=telemetry, args=(drone_id, listen_port-1,))
     telemetry_thread.daemon = True
     CONNECTED = True
-
-    # Crear thread para escuchar comandos por terminal
-    #terminal_thread = threading.Thread(target=terminal)
-    #terminal_thread.daemon = True
-
-    # lanzar operaciones del dron 
     telemetry_thread.start()
-    #terminal_thread.start()
 
     # thread para escuchar comandos de la ET
     listen_thread = threading.Thread(target=listen_to_et, args=(drone_id, et_id, listen_port,))
