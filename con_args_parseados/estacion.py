@@ -31,10 +31,10 @@ def exit_handler(args):
         for et in data:
             if et["id"] != args:
                 new_data.append(et)
-
+    
     with open("db/estaciones.json", "w") as jsonFile:
         json.dump(new_data, jsonFile)
-
+    exit()
 
 
 def main():
@@ -95,6 +95,7 @@ def main():
     y = threading.Thread(target=recv_thread_bo, args=(args.et_id,))
     y.daemon = True
     y.start()
+
 
     command = input("Comando: ")
     while True:
@@ -343,8 +344,8 @@ def get_drone_id(et_id):
                 try:
                     drone_id = et["connected"]
                 except:
-                    print("ET y drone no estaban linkeados")
-                break
+                    print("ET y drone no estaban conectados")
+                    return False
     return drone_id
 
 def get_et_port(et_id):
@@ -387,10 +388,12 @@ def recv_thread_bo(et_id):
                         if msg == 'fly':
                             send_fly(drone_id)
                         elif msg == 'land':
+                            print(1)
                             send_land(drone_id)
                         elif msg == 'kill':
-                            kill_drone(et_id)
-                            exit_handler()
+                            if drone_id:
+                                kill_drone(et_id)
+                            exit_handler(et_id)
 
 
 def recv_thread_et(et_id):
@@ -453,6 +456,16 @@ def recv_thread_et(et_id):
                         if not data: break
                         msg = data.decode(errors='ignore')
                         print("Telemetry: " + msg)
+                        #Esto es una tremenda ñapa pero no se me ocurre otra cosa para matar el thread
+                        with open("db/estaciones.json", "r") as jsonFile:
+                            try:
+                                data = json.load(jsonFile)
+                                if not data:
+                                    return
+
+                            except JSONDecodeError:
+                                print("Matando thread")
+                                return
                         
 
 def send_msg(bo, et_id, msg):
@@ -528,7 +541,7 @@ def get_drone_port(drone_id):
         try: 
             data = json.load(jsonFile)
             for el in data:
-                if el["drone_id"] == drone_id:
+                if el["id"] == drone_id:
                     drone_port = el["listens"]
             return drone_port
         except JSONDecodeError:

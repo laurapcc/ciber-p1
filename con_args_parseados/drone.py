@@ -42,7 +42,7 @@ def exit_handler(args):
 
     with open("db/drones.json", "w") as jsonFile:
         json.dump(new_data, jsonFile)
-
+    exit()
 
 
 def main():
@@ -361,13 +361,14 @@ def listen_to_et(drone_id, et_id, listen_port):
                         fly()
 
                     elif msg == "LAND":
+                        print("land recibido")
                         land()
                     
                     elif msg == "DISCONNECT":
                         disconnect(et_id, drone_id)
                     
                     elif msg == "kill":
-                        exit_handler()
+                        exit_handler(drone_id)
 
             if not CONNECTED:
                 break
@@ -455,6 +456,16 @@ def telemetry(drone_id, et_port):
                 print(e)
                 return
             time.sleep(2)
+            with open("db/estaciones.json", "r") as jsonFile:
+                try:
+                    data = json.load(jsonFile)
+                    if not data:
+                        print("llegue")
+                        return
+
+                except JSONDecodeError:
+                    print("Matando thread")
+                    return
         s.shutdown(socket.SHUT_RDWR)
         print("Telemetry thread finished")
 

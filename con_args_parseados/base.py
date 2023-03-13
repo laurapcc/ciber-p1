@@ -18,6 +18,7 @@ descripcion = "Envia un comando a la base de operaciones"
 def exit_handler():
     print("Borrando base de operaciones y saliendo.")
     os.remove("db/base.json")
+    exit()
     # NOTA: si dejamos el archivo luego peta por index out of range al abrir
     #       si lo borramos nos ahorramos ese problem
     ##with open("db/base.json", "r") as jsonFile:
