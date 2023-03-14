@@ -181,7 +181,7 @@ def link_drone_et(drone_id, et_id):
             print("ERROR: El dron con ID", drone_id, "no existe")
             return
     
-    # Estacion de tierra existe
+    # Estacion de tierra existe y esta linkeada a BO
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -192,9 +192,17 @@ def link_drone_et(drone_id, et_id):
                 print("ERROR: La estacion de tierra con ID", et_id, "no existe")
                 return
 
+            # Comprobar que esta linkeada a BO
+            for et in data:
+                if et["id"] == et_id:
+                    if not et["linked"]:
+                        print("ERROR: La ET no esta linkeada a BO")
+                        return
+
         except JSONDecodeError:
             print("ERROR: La estacion de tierra con ID", et_id, "no existe")
             return
+        
         
     # Si ambos existen, añadir a la lista de linked_ets del dron
     with open("db/drones.json", "r") as jsonFile:
@@ -308,18 +316,27 @@ def listen_to_et(drone_id, et_id, listen_port):
             if s in r:
                 conn, addr = s.accept()
                 with conn:
-                    msg = b''
-                    while True:
-                        data = conn.recv(1024)
-                        if not data: break
-                        msg += data
+                    # recibir clave de sesion
+                    data = conn.recv(4096)
+                    if not data: break
 
-                    msg = msg.decode()
+                    # descifrar clave de sesion con clave privada del dron
+                    cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
+                    session_key = cipher.decrypt(data)
+                    print("Clave de sesion recibida:")
+                    print(session_key)
+
+                    # descifrar mensaje recibido con clave de sesion
+                    data = conn.recv(4096)
+                    if not data: break
+                    fernet = Fernet(session_key)
+                    msg = fernet.decrypt(data).decode()
+                    print("Mensaje recibido: ", msg)
+
                     if msg == "FLY":
                         fly()
 
                     elif msg == "LAND":
-                        print("land recibido")
                         land()
                     
                     elif msg == "DISCONNECT":

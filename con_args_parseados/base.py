@@ -84,16 +84,16 @@ def main():
     x.start()
 
     command = input("Comando: ")
-    #TODO: Si llega un comando raro solucionar los except para que no se cierre
     while True:
         try:
-            #Para que el mensaje pueda contener espacios lo recogemos como todo el texto entre comillas, suponiendo que no habra otro texto entre comillas
-            i = command.index('"')
-            j = command.index('"', i+1)
-            args = parser.parse_args(command.split()) 
-            args.msg = command[i+1,j]
-        except ValueError:
-            args = parser.parse_args(command.split()) 
+            try:
+                #Para que el mensaje pueda contener espacios lo recogemos como todo el texto entre comillas, suponiendo que no habra otro texto entre comillas
+                i = command.index('"')
+                j = command.index('"', i+1)
+                args = parser.parse_args(command.split()) 
+                args.msg = command[i+1,j]
+            except ValueError:
+                args = parser.parse_args(command.split()) 
         except:
             print("ERROR: Comando no reconocido")
             parser.print_help()

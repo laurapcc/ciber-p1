@@ -10,8 +10,8 @@ Enviar desde DRONE a ET:
 Enviar desde ET a DRONE:
 
 --register --et_id et01
---link --drone_id drone01
---unlink --drone_id drone01
+--link 
+--unlink
 --fly --drone_id drone01
 --land --drone_id drone01
 --disconnect --drone_id drone01
