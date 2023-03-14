@@ -12,6 +12,8 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+from cryptography.fernet import Fernet
+
 
 
 
@@ -162,7 +164,7 @@ def register_drone(drone_id):
     
     print("REGISTER completado con exito: drone registrado con ID:", drone_id)
 
-#TODO: comprobar que no estan ya linkeados
+
 def link_drone_et(drone_id, et_id):
     # Dron existe
     with open("db/drones.json", "r") as jsonFile:
@@ -273,6 +275,7 @@ def check_linked(drone_id, et_id):
 
     return False
 
+
 def connect_drone_et(drone_id, et_id):
     global CONNECTED
 
@@ -282,47 +285,9 @@ def connect_drone_et(drone_id, et_id):
     if not listen_port:
         print("ERROR: drone con id", drone_id, "y estacion con id", et_id, "no estan linkeados")
         return
-
-    # crear clave de sesion
-    session_key = os.urandom(32)
-    print("session_key: ", session_key)
-    
-    with open("db/estaciones.json", "r") as jsonFile:
-        try:
-            data = json.load(jsonFile)
-            print(et_id)
-            for el in data:
-                if el["id"] == et_id:
-                    el["connected"] = drone_id
-                    et_public_key = el["public_key"]
-        except JSONDecodeError:
-            print("ERROR")
-            return
-    with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
-
-    
-    # enviar la clave de sesion encriptada con la clave publica de la ET
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.connect((HOST, listen_port-1))
-        except:
-            print("ERROR: No se pudo conectar con la estacion de tierra")
-            return
-        
-        cipher = PKCS1_OAEP.new(RSA.import_key(et_public_key))
-        cipher_msg = cipher.encrypt(session_key)
-        try:
-            s.sendall(cipher_msg)
-        except:
-            print("ERROR while sending session key")
-            return
-
-    time.sleep(0.1)
-    
             
     # Enviar telemetry y escuchar comando de la ET
-    telemetry_thread = threading.Thread(target=telemetry, args=(drone_id, listen_port-1,))
+    telemetry_thread = threading.Thread(target=telemetry, args=(et_id, drone_id, listen_port-1,))
     telemetry_thread.daemon = True
     CONNECTED = True
     telemetry_thread.start()
@@ -426,11 +391,49 @@ def disconnect(et_id, drone_id):
     BATTERY = 100
     
 
-
-def telemetry(drone_id, et_port):
+def telemetry(et_id, drone_id, et_port):
     global CONNECTED
 
-    print("Telemetry thread started")
+    # crear clave de sesion
+    #session_key = os.urandom(32)
+    session_key = Fernet.generate_key()
+    print("session_key: ", session_key)
+    
+    # Recuperar la clave publica de la ET
+    with open("db/estaciones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+            print(et_id)
+            for el in data:
+                if el["id"] == et_id:
+                    el["connected"] = drone_id
+                    et_public_key = el["public_key"]
+        except JSONDecodeError:
+            print("ERROR")
+            return
+    with open("db/estaciones.json", "w") as jsonFile:
+        json.dump(data, jsonFile)
+
+    
+    # enviar la clave de sesion encriptada con la clave publica de la ET
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.connect((HOST, et_port))
+        except:
+            print("ERROR: No se pudo conectar con la estacion de tierra")
+            return
+        
+        cipher = PKCS1_OAEP.new(RSA.import_key(et_public_key))
+        cipher_msg = cipher.encrypt(session_key)
+        try:
+            s.sendall(cipher_msg)
+        except:
+            print("ERROR while sending session key")
+            return
+
+    time.sleep(0.1)
+
+    print("Telemetry started")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.connect((HOST, et_port))
@@ -442,23 +445,30 @@ def telemetry(drone_id, et_port):
         while CONNECTED:
             msg = telemetry_msg(drone_id)
             print(msg)
+
+            # cifrar mensaje con clave de sesion
+            fernet = Fernet(session_key)
+            msg_cipher = fernet.encrypt(msg.encode())
+
             try:
-                s.sendall(msg.encode(errors='ignore'))
+                s.sendall(msg_cipher)
             except Exception as e:
                 print("ERROR while sending telemetry")
                 print(e)
                 return
             time.sleep(2)
+
             with open("db/estaciones.json", "r") as jsonFile:
                 try:
                     data = json.load(jsonFile)
                     if not data:
-                        print("llegue")
+                        print("Estacion ha muerto")
                         return
 
                 except JSONDecodeError:
                     print("Matando thread")
                     return
+
         s.shutdown(socket.SHUT_RDWR)
         print("Telemetry thread finished")
 

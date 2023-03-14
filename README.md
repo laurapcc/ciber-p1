@@ -1,5 +1,5 @@
 # Ciberseguridad P1 - Centro de mando
-==============
+----------
 
 - Pedro Sánchez de la Muela Garzón
 - Laura de Paz Carbajo

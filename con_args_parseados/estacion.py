@@ -12,6 +12,8 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+from cryptography.fernet import Fernet
+
 
 
 HOST = "127.0.0.1"
@@ -101,12 +103,13 @@ def main():
     while True:
         try:
             #Para que el mensaje pueda contener espacios lo recogemos como todo el texto entre comillas, suponiendo que no habra otro texto entre comillas
-            i = command.index('"')
-            j = command.index('"', i+1)
-            args = parser.parse_args(command.split()) 
-            args.msg = command[i+1,j]
-        except ValueError:
-            args = parser.parse_args(command.split()) 
+            try:
+                i = command.index('"')
+                j = command.index('"', i+1)
+                args = parser.parse_args(command.split()) 
+                args.msg = command[i+1,j]
+            except ValueError:
+                args = parser.parse_args(command.split()) 
         except:
             print("ERROR: Comando no reconocido")
             parser.print_help()
@@ -361,9 +364,9 @@ def recv_thread_bo(et_id):
     print("thread bo iniciado")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((HOST, et_port + 100))
-            print("Escuchando en puerto", et_port+100)
+            print("Escuchando a BO en puerto", et_port+100)
             s.listen(1)
-            print("Escuchando en puerto", et_port+100)
+            print("Escuchando a BO en puerto", et_port+100)
             while True:
                 time.sleep(0.5)
                 conn, addr = s.accept()
@@ -388,20 +391,6 @@ def recv_thread_bo(et_id):
 
 
 def recv_thread_et(et_id):
-    def recvall(sock):
-        BUFF_SIZE = 4096 # 4 KiB
-        fragments = []
-        while True: 
-            chunk = sock.recv(BUFF_SIZE)
-            fragments.append(chunk)
-            # if the following line is removed, data is omitted
-            time.sleep(0.005)
-            if len(chunk) < BUFF_SIZE: 
-                break
-            
-        data = b''.join(fragments)
-        return data
-        
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -427,26 +416,31 @@ def recv_thread_et(et_id):
                 data = conn.recv(1024)
                 cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
                 session_key = cipher.decrypt(data)
-                print("Clave de sesion recibida")
+                print("Clave de sesion de conexion con dron recibida")
                 print(session_key)
+
 
     # escuchar telemetry         
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((HOST, et_port))
-            print("Escuchando en puerto", et_port)
+            print("Escuchando a dron en puerto", et_port)
             s.listen(1)
-            print("Escuchando en puerto", et_port)
+            print("Escuchando a dron fen puerto", et_port)
             while True:
-                time.sleep(0.5)
+                #time.sleep(0.5)
                 conn, addr = s.accept()
                 print(HOST, et_port)
                 with conn:
                     print('Connected by', addr)
                     while True:
-                        data = conn.recv(1024)
+                        data = conn.recv(4096)
                         if not data: break
-                        msg = data.decode(errors='ignore')
+
+                        # descifrar mensaje recibido con clave de sesion
+                        fernet = Fernet(session_key)
+                        msg = fernet.decrypt(data).decode()
                         print("Telemetry: " + msg)
+
                         #Esto es una tremenda ñapa pero no se me ocurre otra cosa para matar el thread
                         with open("db/estaciones.json", "r") as jsonFile:
                             try:
@@ -466,7 +460,6 @@ def send_msg(bo, et_id, msg):
             try:
                 data = json.load(jsonFile)
                 PORT = data[0]["port"]
-
             
             except (JSONDecodeError, OSError):
                 print("ERROR: la base de operaciones no esta activa")
@@ -488,7 +481,7 @@ def send_msg(bo, et_id, msg):
                         PORT = el['listens_bo']
 
             except JSONDecodeError:
-                # Primera entrada del json
+                #f Primera entrada del json
                 print("ERROR: No hay estaciones registradas")
                 return
 
