@@ -379,7 +379,7 @@ def recv_thread_bo(et_id):
                         if msg == 'fly':
                             send_fly(drone_id)
                         elif msg == 'land':
-                            print(1)
+                            print("LAND recibido")
                             send_land(drone_id)
                         elif msg == 'kill':
                             if drone_id:

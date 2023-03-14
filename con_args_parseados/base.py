@@ -278,20 +278,36 @@ def land(drone_id):
             print("Error")
             return
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, et_port))
+        s.connect((HOST, et_port + 100))
         s.sendall("land".encode())
         print("LAND enviado")
     return
 
 def get_status():
+    print("ESTACIONES:")
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
 
             for el in data:
-                et_port = el["listens"] + 100
-        except:
-            pass
+                for key, value in el.items():
+                    if key not in ['public_key']:
+                        print(key, value)
+                print("-----")
+        except JSONDecodeError:
+            print("Error en get_status")
+    print("DRONES:")
+    with open("db/drones.json", "r") as jsonFile:
+        try:
+            data = json.load(jsonFile)
+
+            for el in data:
+                for key, value in el.items():
+                    if key not in ['public_key']:
+                        print(key, value)
+                print("-----")
+        except JSONDecodeError:
+            print("Error en get_status")
 
 
 def shutdown():
@@ -313,7 +329,6 @@ def send_kill(et_port):
         s.sendall("kill".encode())
         print("SHUTDOWN enviado")
     exit_handler()
-    return
 
 if __name__ == "__main__":
     main()
