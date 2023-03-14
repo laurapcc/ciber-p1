@@ -12,10 +12,14 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+from cryptography.fernet import Fernet
+
 
 
 HOST = "127.0.0.1"
 PORT = 65300
+
+private_key = None
 
 
 
@@ -35,6 +39,8 @@ def exit_handler():
 
 
 def main():
+    global private_key
+
     parser = argparse.ArgumentParser(
         usage="%(prog)s [OPCIONES] [MENSAJE]...",
         description = descripcion,
@@ -79,6 +85,7 @@ def main():
 
     atexit.register(exit_handler)
 
+    # poner a escuchar a la BO
     x = threading.Thread(target=recv_thread)
     x.daemon = True
     x.start()
@@ -119,7 +126,8 @@ def main():
             print("FLY")
             if args.drone_id:
                 print("drone_id:", args.drone_id)
-                fly(args.drone_id)
+                #fly(args.drone_id)
+                send_to_drone(args.drone_id, "FLY")
             else:
                 print("ERROR: Debes proporcionar un drone_id")
 
@@ -127,7 +135,8 @@ def main():
             print("LAND")
             if args.drone_id:
                 print("drone_id:", args.drone_id)
-                land(args.drone_id)
+                #land(args.drone_id)
+                send_to_drone(args.drone_id, "LAND")
             else:
                 print("ERROR: Debes proporcionar un drone_id")
 
@@ -155,25 +164,11 @@ def main():
         args.file = False
 
         command = input("Comando: ")
-        # args = parser.parse_args(command.split()) 
 
     
 
-    #with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    #    s.bind((HOST, PORT))
-    #    print("Listening on port", PORT)
-    #    s.listen()
-    #    conn, addr = s.accept()
-    #    with conn:
-    #        print(f"Connected by {addr}")
-    #        while True:
-    #            data = conn.recv(1024)
-    #            print(f"Received {data!r}")
-    #            if not data:
-    #                break
-    #            conn.sendall("Hello estacion".encode())
-
 def recv_thread():
+    # recuperar el puerto en el que la BO escucha
     with open("db/base.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -183,6 +178,7 @@ def recv_thread():
             print("ERROR: La base de operaciones no está registrada")
             return
 
+    # escuchar
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, bo_port))
         s.listen(1)
@@ -190,15 +186,30 @@ def recv_thread():
             conn, addr = s.accept()
             with conn:
                 print('Connected by', addr)
-                while True:
-                    data = conn.recv(1024)
-                    if not data: break
-                    print(data.decode())
 
+                # recibir clave de sesion
+                data = conn.recv(4096)
+                if not data: break
+
+                # descifrar clave de sesion con clave privada de la BO
+                cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
+                session_key = cipher.decrypt(data)
+                print("Clave de sesion recibida:")
+                print(session_key)
+
+                # descifrar mensaje recibido con clave de sesion
+                data = conn.recv(4096)
+                if not data: break
+                fernet = Fernet(session_key)
+                msg = fernet.decrypt(data).decode()
+                print("Mensaje recibido: ", msg)
 
 
 def send_msg(et_id, msg):
-    print('TODO: send_msg')
+    # TODO: send_msg con espacios
+
+    # recuperar puerto en el que la ET escucha a la BO
+    # recuperar clave publica de la ET
     with open("db/estaciones.json", "r") as jsonFile:
         try:
             data = json.load(jsonFile)
@@ -208,20 +219,36 @@ def send_msg(et_id, msg):
                 print("ERROR: La ET con ID", et_id, "no existe")
                 return
 
-            # Añadir nuevo drone con un puerto libre
             for el in data:
                 if el['id'] == et_id:
-                    ET_PORT = el['listens_bo']
+                    et_port = el['listens_bo'] + 100
+                    et_public_key = el['public_key']
 
         except JSONDecodeError:
-            # Primera entrada del json
             print("ERROR: No hay estaciones registradas")
             return
+
+    # crear clave de sesion
+    session_key = Fernet.generate_key()
+    print("session_key: ", session_key)
+
+    # enviar mensaje cifrado
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, ET_PORT))
-        s.sendall(msg.encode())
+        s.connect((HOST, et_port))
+
+        # cifrar clave de sesion con clave publica del dron y enviar
+        cipher = PKCS1_OAEP.new(RSA.import_key(et_public_key))
+        cipher_msg = cipher.encrypt(session_key)
+        s.sendall(cipher_msg)
+
+        # cifrar mensaje con clave de sesion y enviar
+        fernet = Fernet(session_key)
+        msg_cipher = fernet.encrypt(msg.encode())
+        s.sendall(msg_cipher)
+
         print("Mensaje enviado")
     return
+
 
 def send_file(et_id, file):
     with open("db/estaciones.json", "r") as jsonFile:
@@ -233,9 +260,9 @@ def send_file(et_id, file):
                 print("ERROR: La ET con ID", et_id, "no existe")
                 return
 
-            a = file.rfind("/")
-
-            file_name = file[a:]
+            #a = file.rfind("/")
+            #file_name = file[a:]
+            file_name = os.path.basename(file)
 
             for el in data:
                 if el['id'] == et_id:
@@ -247,6 +274,43 @@ def send_file(et_id, file):
             return
     os.makedirs(os.path.dirname(et_route), exist_ok=True)
     shutil.copyfile(file, et_route + file_name)
+
+
+def send_to_drone(drone_id, msg):
+    # recuperar puerto en el que la ET escucha a la BO
+    # recuperar clave publica de la ET
+    with open("db/estaciones.json", "r") as jsonFile:
+        try: 
+            data = json.load(jsonFile)
+
+            for et in data:
+                if et["connected"] == drone_id:
+                    et_port = et["listens_bo"]    
+                    et_public_key = et["public_key"]  
+        except JSONDecodeError:
+            print("Error")
+            return
+
+    # crear clave de sesion
+    session_key = Fernet.generate_key()
+    print("session_key: ", session_key)
+
+    # enviar mensaje cifrado
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, et_port + 100))
+
+        # cifrar clave de sesion con clave publica del dron y enviar
+        cipher = PKCS1_OAEP.new(RSA.import_key(et_public_key))
+        cipher_msg = cipher.encrypt(session_key)
+        s.sendall(cipher_msg)
+
+        # cifrar mensaje con clave de sesion y enviar
+        fernet = Fernet(session_key)
+        msg_cipher = fernet.encrypt(msg.encode())
+        s.sendall(msg_cipher)
+
+        print("FLY enviado")
+    
 
 def fly(drone_id):
     with open("db/estaciones.json", "r") as jsonFile:
@@ -282,6 +346,7 @@ def land(drone_id):
         s.sendall("land".encode())
         print("LAND enviado")
     return
+
 
 def get_status():
     print("ESTACIONES:")

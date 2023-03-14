@@ -152,7 +152,6 @@ def main():
         elif args.fly:
             print("FLY")
             if args.drone_id:
-                #send_fly(args.drone_id)
                 send_to_drone(args.drone_id, "FLY")
             else:
                 print("ERROR: Debes proporcionar un drone_id")
@@ -160,7 +159,6 @@ def main():
         elif args.land:
             print("LAND")
             if args.drone_id:
-                #send_land(args.drone_id)
                 send_to_drone(args.drone_id, "LAND")
             else:
                 print("ERROR: Debes proporcionar un drone_id")
@@ -168,7 +166,6 @@ def main():
         elif args.disconnect:
             print("DISCONNECT")
             if args.drone_id:
-                #send_disconnect(args.drone_id)
                 send_to_drone(args.drone_id, "DISCONNECT")
                 CONNECTED = False
             else:
@@ -331,29 +328,39 @@ def recv_thread_bo(et_id):
     """
     et_port = get_et_port(et_id)
     print("thread bo iniciado")
+
+    # escuchar a la BO
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((HOST, et_port + 100))
-            print("Escuchando a BO en puerto", et_port+100)
             s.listen(1)
-            print("Escuchando a BO en puerto", et_port+100)
             while True:
-                time.sleep(0.5)
+                #time.sleep(0.5)
                 conn, addr = s.accept()
-                print(HOST, et_port)
                 with conn:
                     print('Connected by', addr)
+                    
                     while True:
-                        data = conn.recv(1024)
+                        # recibir clave de session
+                        data = conn.recv(4096)
                         if not data: break
-                        msg = data.decode(errors='ignore')
-                        print(msg)
+
+                        # descifrar clave de sesion con clave privada de la ET
+                        cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
+                        session_key = cipher.decrypt(data)
+                        print("Clave de sesion recibida:")
+                        print(session_key)
+
+                        # descifrar mensaje recibido con clave de sesion
+                        data = conn.recv(4096)
+                        if not data: break
+                        fernet = Fernet(session_key)
+                        msg = fernet.decrypt(data).decode()
+                        print("Mensaje recibido: ", msg)
+
                         drone_id = get_drone_id(et_id)
-                        if msg == 'fly':
-                            #send_fly(drone_id)
+                        if msg == 'FLY':
                             send_to_drone(drone_id, "FLY")
-                        elif msg == 'land':
-                            print("LAND recibido")
-                            #send_land(drone_id)
+                        elif msg == 'LAND':
                             send_to_drone(drone_id, "LAND")
                         elif msg == 'kill':
                             if drone_id:
@@ -426,18 +433,24 @@ def recv_thread_drone(et_id):
 
 
 def send_msg(bo, et_id, msg):
-    print('TODO: send_msg con espacios')
+    # TODO: send_msg con espacios
+
+    # enviar mensaje a la BO
     if bo:
+        # recuperar puerto en el que la BO escucha a al ET
+        # recuperar clave publica de la BO
         with open("db/base.json", "r") as jsonFile:
             try:
                 data = json.load(jsonFile)
-                PORT = data[0]["port"]
+                port = data[0]["port"]
+                public_key = data[0]["public_key"]
             
             except (JSONDecodeError, OSError):
                 print("ERROR: la base de operaciones no esta activa")
                 return
 
-    else:
+    # enviar mensaje a otra ET
+    else: 
         with open("db/estaciones.json", "r") as jsonFile:
             try:
                 data = json.load(jsonFile)
@@ -450,25 +463,42 @@ def send_msg(bo, et_id, msg):
                 # Añadir nuevo drone con un puerto libre
                 for el in data:
                     if el['id'] == et_id:
-                        PORT = el['listens_bo']
+                        port = el['listens_bo']
+                        public_key = el['public_key']
 
             except JSONDecodeError:
-                #f Primera entrada del json
+                # Primera entrada del json
                 print("ERROR: No hay estaciones registradas")
                 return
 
+    # crear clave de sesion
+    session_key = Fernet.generate_key()
+    print("session_key: ", session_key)
+
+    # enviar mensaje cifrado
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        s.sendall(msg.encode())
-        print("Mensaje enviado")
-    return
+        try:
+            s.connect((HOST, port))
+
+            # cifrar clave de sesion con clave publica del dron y enviar
+            cipher = PKCS1_OAEP.new(RSA.import_key(public_key))
+            cipher_msg = cipher.encrypt(session_key)
+            s.sendall(cipher_msg)
+
+            # cifrar mensaje con clave de sesion y enviar
+            fernet = Fernet(session_key)
+            msg_cipher = fernet.encrypt(msg.encode())
+            s.sendall(msg_cipher)
+
+            print("Mensaje enviado")
+        except:
+            print("ERROR al enviar mensaje")
 
 
 def send_file(bo, et_id, file):
-    if bo:
-        # enviar file a la BO
-        pass
-    else:
+    if bo: # enviar a la BO
+        route = 'bo/files/'
+    else: # enviar a otra ET
         with open("db/estaciones.json", "r") as jsonFile:
             try:
                 data = json.load(jsonFile)
@@ -478,20 +508,22 @@ def send_file(bo, et_id, file):
                     print("ERROR: La ET con ID", et_id, "no existe")
                     return
 
-                a = file.rfind("/")
-
-                file_name = file[a:]
-
                 for el in data:
                     if el['id'] == et_id:
-                        et_route = el['files']
+                        route = el['files']
 
             except JSONDecodeError:
                 # Primera entrada del json
                 print("ERROR: No hay estaciones registradas")
                 return
-        os.makedirs(os.path.dirname(et_route), exist_ok=True)
-        shutil.copyfile(file, et_route + file_name)
+            
+    #a = file.rfind("/")
+    #file_name = file[a:]
+    file_name = os.path.basename(file)
+
+
+    os.makedirs(os.path.dirname(route), exist_ok=True)
+    shutil.copyfile(file, route + file_name)
 
 
 def get_drone_port(drone_id):

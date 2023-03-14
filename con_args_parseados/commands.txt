@@ -19,14 +19,19 @@ Enviar desde ET a DRONE:
 
 Enviar desde ET a BO:
 
---send_msg --info_to_bo --msg "holaa BO, que tal?"
+--send_msg --info_to_bo --msg Holaaa
 --send_file --info_to_bo --file test.txt
+
+
+Enviar desde ET a otra ET:
+
+--send_msg --et_id et01 --msg Holii
 
 
 Enviar desde BO:
 
 --send_msg --et_id et01 --msg "holaa ET-1, que tal?"
---send_file --et_id et01 --file test.txt
+--send_file --et_id et02 --file test.txt
 --fly --drone_id drone01
 --land --drone_id drone01
 --get_status
