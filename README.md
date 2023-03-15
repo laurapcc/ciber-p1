@@ -79,20 +79,20 @@ Un aspecto a tener en cuenta es que la batería de un dron dura 60 segundos en v
 
 ## Comunicaciones seguras
 
--Para asegurar la confidencialidad de las comunicaciones se usa un esquema de clave pública y privada, que se intercambian al realizar la primera conexión, además se crea una clave de sesión para cada comunicación. 
-```
--La clave pública de cada elemento se almacena en la base de datos y la clave privada en memoria, por lo que es diferente para cada ejecución del programa.
+- Para asegurar la confidencialidad de las comunicaciones se usa un esquema de clave pública y privada, que se intercambian al realizar la primera conexión, además se crea una clave de sesión para cada comunicación. 
+
+- La clave pública de cada elemento se almacena en la base de datos y la clave privada en memoria, por lo que es diferente para cada ejecución del programa.
 
 ## Posibles bugs
 
--A la hora de ejecutar los programas pueden surgir problemas si no se ejecutan en el orden indicado.
--Si una ET o un Dron se cierran mientras que están conectados puede surgir el problema de que el socket que se utiliza para mandar el mensaje de telemetry se mantenga activo, esto se soluciona esperando a que el propio sistema operativo lo cierre.
-```
--Al acabar cada uno de los tres programas su funcionalidad indica que se borre su parte de información de la base de datos, pero si la salida del programa es "extraña" puede pasar que no se borre, en estos casos recomendamos borrarla manualmente del .json correspondiente.
+- A la hora de ejecutar los programas pueden surgir problemas si no se ejecutan en el orden indicado.
+- Si una ET o un Dron se cierran mientras que están conectados puede surgir el problema de que el socket que se utiliza para mandar el mensaje de telemetry se mantenga activo, esto se soluciona esperando a que el propio sistema operativo lo cierre.
+
+- Al acabar cada uno de los tres programas su funcionalidad indica que se borre su parte de información de la base de datos, pero si la salida del programa es "extraña" puede pasar que no se borre, en estos casos recomendamos borrarla manualmente del .json correspondiente.
 
 ## Decisiones de diseño
 
--Vimos más adecuado que cada elemento cuando se finalizase con ctrl-c su programa correspondiente, borrase todos sus rastros de la base de datos, ya que al ser un programa enfocado al ámbito militar, creímos que sería mejor que los datos no fuesen persistentes.
--Para la seguridad de las comunicaciones, decidimos guardar la clave pública en la base de datos para facilitar su acceso y la clave privada en memoria para aumentar su seguridad, al igual que la clave de sesión, ya que al ser los elementos efímeros en nuestro planteamiento entendemos que las claves también debían serlo.
+- Vimos más adecuado que cada elemento cuando se finalizase con ctrl-c su programa correspondiente, borrase todos sus rastros de la base de datos, ya que al ser un programa enfocado al ámbito militar, creímos que sería mejor que los datos no fuesen persistentes.
+- Para la seguridad de las comunicaciones, decidimos guardar la clave pública en la base de datos para facilitar su acceso y la clave privada en memoria para aumentar su seguridad, al igual que la clave de sesión, ya que al ser los elementos efímeros en nuestro planteamiento entendemos que las claves también debían serlo.
 
 
