@@ -21,7 +21,8 @@ PORT = 65300
 
 private_key = None
 
-
+file_key = b'AOAeQpvbJ0Rl6vz26tjixCrnk0yf0OFNI5aeXOG8MqA='
+file_fernet = None
 
 descripcion = "Envia un comando a la base de operaciones"
 
@@ -29,17 +30,11 @@ def exit_handler():
     print("Borrando base de operaciones y saliendo.")
     os.remove("db/base.json")
     exit()
-    # NOTA: si dejamos el archivo luego peta por index out of range al abrir
-    #       si lo borramos nos ahorramos ese problem
-    ##with open("db/base.json", "r") as jsonFile:
-    ##    new_data = []
-
-    ##with open("db/base.json", "w") as jsonFile:
-    ##    json.dump(new_data, jsonFile)
 
 
 def main():
     global private_key
+    global file_fernet
 
     parser = argparse.ArgumentParser(
         usage="%(prog)s [OPCIONES] [MENSAJE]...",
@@ -64,9 +59,10 @@ def main():
     # crear clave publica y privada
     key = RSA.generate(2048)
     private_key = key.export_key().decode('utf-8')
+    file_fernet = Fernet(file_key)
 
     try:
-        jsonFile = open("db/base.json", "r")
+        jsonFile = open("db/base.json", "r+")
         data = json.load(jsonFile)
 
         if data:
@@ -78,7 +74,9 @@ def main():
         data = [{"status": "active", "port": PORT, "public_key": key.publickey().export_key().decode("utf-8")}]
 
         with open("db/base.json", "w+") as jsonFile:
-            json.dump(data, jsonFile)
+            data_json = json.dumps(data)
+            cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+            jsonFile.write(cipher_data.decode('utf-8'))
             print("Base de operaciones esperando instrucciones")
 
     args = parser.parse_args()
@@ -171,7 +169,10 @@ def recv_thread():
     # recuperar el puerto en el que la BO escucha
     with open("db/base.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            #cipher_data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             bo_port = data[0]["port"]
 
         except JSONDecodeError:
@@ -194,8 +195,6 @@ def recv_thread():
                 # descifrar clave de sesion con clave privada de la BO
                 cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
                 session_key = cipher.decrypt(data)
-                print("Clave de sesion recibida:")
-                print(session_key)
 
                 # descifrar mensaje recibido con clave de sesion
                 data = conn.recv(4096)
@@ -206,13 +205,13 @@ def recv_thread():
 
 
 def send_msg(et_id, msg):
-    # TODO: send_msg con espacios
-
     # recuperar puerto en el que la ET escucha a la BO
     # recuperar clave publica de la ET
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             ids = [et["id"] for et in data]
             if et_id not in ids:
@@ -230,7 +229,6 @@ def send_msg(et_id, msg):
 
     # crear clave de sesion
     session_key = Fernet.generate_key()
-    print("session_key: ", session_key)
 
     # enviar mensaje cifrado
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -253,7 +251,9 @@ def send_msg(et_id, msg):
 def send_file(et_id, file):
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             ids = [et["id"] for et in data]
             if et_id not in ids:
@@ -281,7 +281,9 @@ def send_to_drone(drone_id, msg):
     # recuperar clave publica de la ET
     with open("db/estaciones.json", "r") as jsonFile:
         try: 
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             for et in data:
                 if et["connected"] == drone_id:
@@ -293,7 +295,6 @@ def send_to_drone(drone_id, msg):
 
     # crear clave de sesion
     session_key = Fernet.generate_key()
-    print("session_key: ", session_key)
 
     # enviar mensaje cifrado
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -315,7 +316,9 @@ def send_to_drone(drone_id, msg):
 def fly(drone_id):
     with open("db/estaciones.json", "r") as jsonFile:
         try: 
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             for et in data:
                 if et["connected"] == drone_id:
@@ -352,7 +355,9 @@ def get_status():
     print("ESTACIONES:")
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             for el in data:
                 for key, value in el.items():
@@ -364,7 +369,9 @@ def get_status():
     print("DRONES:")
     with open("db/drones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             for el in data:
                 for key, value in el.items():
@@ -378,7 +385,9 @@ def get_status():
 def shutdown():
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             for el in data:
                 et_port = el["listens_bo"] + 100

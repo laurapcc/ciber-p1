@@ -24,26 +24,32 @@ CONNECTED = False
 
 private_key = None
 
+file_key = b'AOAeQpvbJ0Rl6vz26tjixCrnk0yf0OFNI5aeXOG8MqA='
+file_fernet = None
 
 descripcion = "Estacion de tierra"
 
 def exit_handler(args):
     print("Borrando estacion y saliendo.")
-    # TODO: borrar todo rastro de esta ET en drones.json
     with open("db/estaciones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
+        cipher_data = jsonFile.read()
+        data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+        data = json.loads(data_s)
         new_data = []
         for et in data:
             if et["id"] != args:
                 new_data.append(et)
     
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(new_data, jsonFile)
+        data_json = json.dumps(new_data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
     exit()
 
 
 def main():
     global CONNECTED
+    global file_fernet
 
     parser = argparse.ArgumentParser(
         usage="%(prog)s [OPCIONES] [MENSAJE]...",
@@ -69,6 +75,7 @@ def main():
     parser.add_argument('--file', dest='file', default=False, help='Fichero a enviar')
 
     args = parser.parse_args()
+    file_fernet = Fernet(file_key)
 
     atexit.register(exit_handler, args=args.et_id)
 
@@ -187,7 +194,9 @@ def registered(et_id):
     """
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             # Comprobar que existe
             ids = [et["id"] for et in data]
@@ -213,7 +222,9 @@ def register_estacion(et_id):
 
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             if data:
                 # Comprobar que no existe
                 ids = [et["id"] for et in data]
@@ -232,7 +243,9 @@ def register_estacion(et_id):
             data = [{"id": et_id, "linked": False, "listens_bo": 64000,  "linked_drones": [], "files": "ets/" + et_id + "/files/", "public_key": key.publickey().export_key().decode("utf-8")}]
 
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
     
     print("REGISTER completado con exito: estacion de tierra registrada con ID:", et_id)
 
@@ -244,7 +257,9 @@ def link_et(et_id):
     """
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             for et in data:
                 if et["id"] == et_id:
                     et["linked"] = True
@@ -254,7 +269,9 @@ def link_et(et_id):
             return
         
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
 
     print("LINK completado con exito: ET con ID", et_id, "enlazada con la BO")
         
@@ -266,7 +283,9 @@ def unlink_et(et_id):
     """
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             for et in data:
                 if et["id"] == et_id:
                     et["linked"] = False
@@ -276,7 +295,9 @@ def unlink_et(et_id):
             return
     
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
     
     print("UNLINK completado con exito: ET con ID", et_id, "desenlazada con la BO")
 
@@ -287,7 +308,9 @@ def get_drone_id(et_id):
     et_id: id de la estacion de tierra
     """
     with open("db/estaciones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
+        cipher_data = jsonFile.read()
+        data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+        data = json.loads(data_s)
 
         for et in data:
             if et["id"] == et_id:
@@ -306,7 +329,9 @@ def get_et_port(et_id):
     """
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             et_port = 0
             for el in data:
@@ -347,8 +372,6 @@ def recv_thread_bo(et_id):
                         # descifrar clave de sesion con clave privada de la ET
                         cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
                         session_key = cipher.decrypt(data)
-                        print("Clave de sesion recibida:")
-                        print(session_key)
 
                         # descifrar mensaje recibido con clave de sesion
                         data = conn.recv(4096)
@@ -387,8 +410,6 @@ def recv_thread_drone(et_id):
                     data = conn.recv(1024)
                     cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
                     session_key = cipher.decrypt(data)
-                    print("Clave de sesion de conexion con dron recibida")
-                    print(session_key)
         
         CONNECTED = True
 
@@ -417,7 +438,9 @@ def recv_thread_drone(et_id):
                                 # parar el thread 
                                 with open("db/estaciones.json", "r") as jsonFile:
                                     try:
-                                        data = json.load(jsonFile)
+                                        cipher_data = jsonFile.read()
+                                        data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+                                        data = json.loads(data_s)
                                         if not data:
                                             return
 
@@ -441,7 +464,9 @@ def send_msg(bo, et_id, msg):
         # recuperar clave publica de la BO
         with open("db/base.json", "r") as jsonFile:
             try:
-                data = json.load(jsonFile)
+                cipher_data = jsonFile.read()
+                data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+                data = json.loads(data_s)
                 port = data[0]["port"]
                 public_key = data[0]["public_key"]
             
@@ -453,7 +478,9 @@ def send_msg(bo, et_id, msg):
     else: 
         with open("db/estaciones.json", "r") as jsonFile:
             try:
-                data = json.load(jsonFile)
+                cipher_data = jsonFile.read()
+                data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+                data = json.loads(data_s)
 
                 ids = [et["id"] for et in data]
                 if et_id not in ids:
@@ -473,7 +500,6 @@ def send_msg(bo, et_id, msg):
 
     # crear clave de sesion
     session_key = Fernet.generate_key()
-    print("session_key: ", session_key)
 
     # enviar mensaje cifrado
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -501,7 +527,9 @@ def send_file(bo, et_id, file):
     else: # enviar a otra ET
         with open("db/estaciones.json", "r") as jsonFile:
             try:
-                data = json.load(jsonFile)
+                cipher_data = jsonFile.read()
+                data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+                data = json.loads(data_s)
 
                 ids = [et["id"] for et in data]
                 if et_id not in ids:
@@ -529,7 +557,9 @@ def send_file(bo, et_id, file):
 def get_drone_port(drone_id):
     with open("db/drones.json", "r") as jsonFile:
         try: 
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             for el in data:
                 if el["id"] == drone_id:
                     drone_port = el["listens"]
@@ -560,7 +590,9 @@ def send_to_drone(drone_id, msg):
     # recuperar clave publica del dron
     with open("db/drones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             for drone in data:
                 if drone['id'] == drone_id:
                     drone_port = drone['listens']
@@ -573,7 +605,6 @@ def send_to_drone(drone_id, msg):
 
     # crear clave de sesion
     session_key = Fernet.generate_key()
-    print("session_key: ", session_key)
 
     # enviar mensaje cifrado
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

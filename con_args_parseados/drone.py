@@ -29,6 +29,8 @@ CONNECTED = False
 
 private_key = None
 
+file_key = b'AOAeQpvbJ0Rl6vz26tjixCrnk0yf0OFNI5aeXOG8MqA='
+file_fernet = None
 
 descripcion = "Envia un comando a un dron"
 
@@ -36,18 +38,24 @@ def exit_handler(args):
     print("Borrando dron y saliendo.")
     # TODO: borrar todo rastro de este dron en estaciones.json
     with open("db/drones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
+        cipher_data = jsonFile.read()
+        data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+        data = json.loads(data_s)
         new_data = []
         for drone in data:
             if drone["id"] != args:
                 new_data.append(drone)
 
     with open("db/drones.json", "w") as jsonFile:
-        json.dump(new_data, jsonFile)
+        data_json = json.dumps(new_data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
     exit()
 
 
 def main():
+    global file_fernet
+
     parser = argparse.ArgumentParser(
         usage="%(prog)s [OPCIONES] [MENSAJE]...",
         description = descripcion,
@@ -67,6 +75,7 @@ def main():
 
 
     args = parser.parse_args()
+    file_fernet = Fernet(file_key)
 
     atexit.register(exit_handler, args=args.drone_id)
 
@@ -139,7 +148,9 @@ def register_drone(drone_id):
 
     with open("db/drones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             # Comprobar que no existe
             ids = [drone["id"] for drone in data]
@@ -160,7 +171,9 @@ def register_drone(drone_id):
             data = [{"id": drone_id, "listens": 64001, "linked_ets": [], "public_key": key.publickey().export_key().decode("utf-8")}]
 
     with open("db/drones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
     
     print("REGISTER completado con exito: drone registrado con ID:", drone_id)
 
@@ -169,7 +182,9 @@ def link_drone_et(drone_id, et_id):
     # Dron existe
     with open("db/drones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             # Comprobar que existe
             ids = [drone["id"] for drone in data]
@@ -184,7 +199,9 @@ def link_drone_et(drone_id, et_id):
     # Estacion de tierra existe y esta linkeada a BO
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
 
             # Comprobar que existe
             ids = [et["id"] for et in data]
@@ -206,7 +223,9 @@ def link_drone_et(drone_id, et_id):
         
     # Si ambos existen, añadir a la lista de linked_ets del dron
     with open("db/drones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
+        cipher_data = jsonFile.read()
+        data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+        data = json.loads(data_s)
 
         for drone in data:
             if drone["id"] == drone_id:
@@ -214,11 +233,15 @@ def link_drone_et(drone_id, et_id):
                 break
 
     with open("db/drones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
 
     # Si ambos existen, añadir a la lista de linked_drones de la estacion
     with open("db/estaciones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
+        cipher_data = jsonFile.read()
+        data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+        data = json.loads(data_s)
 
         for et in data:
             if et["id"] == et_id:
@@ -226,7 +249,9 @@ def link_drone_et(drone_id, et_id):
                 break
 
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
 
     
     print("LINK completado con exito: dron", drone_id, "ahora esta linkeado a la estacion de tierra", et_id)
@@ -235,7 +260,9 @@ def link_drone_et(drone_id, et_id):
 def unlink_drone_et(drone_id, et_id):
     with open("db/drones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             for drone in data:
                 if drone["id"] == drone_id:
                     try:
@@ -249,11 +276,15 @@ def unlink_drone_et(drone_id, et_id):
             return
     
     with open("db/drones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
 
     
     with open("db/estaciones.json", "r") as jsonFile:
-        data = json.load(jsonFile)
+        cipher_data = jsonFile.read()
+        data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+        data = json.loads(data_s)
 
         for et in data:
             if et["id"] == et_id:
@@ -264,7 +295,9 @@ def unlink_drone_et(drone_id, et_id):
                 break
 
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
     
 
     print("UNLINK completado con exito: dron", drone_id, "ahora ya no esta linkeado a la estacion de tierra", et_id)
@@ -274,7 +307,9 @@ def check_linked(drone_id, et_id):
     # Comprobar que drone y et estan linkeados
     with open("db/drones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             for drone in data:
                 if drone["id"] == drone_id and et_id in drone["linked_ets"]:
                     return drone["listens"]
@@ -323,8 +358,6 @@ def listen_to_et(drone_id, et_id, listen_port):
                     # descifrar clave de sesion con clave privada del dron
                     cipher = PKCS1_OAEP.new(RSA.import_key(private_key))
                     session_key = cipher.decrypt(data)
-                    print("Clave de sesion recibida:")
-                    print(session_key)
 
                     # descifrar mensaje recibido con clave de sesion
                     data = conn.recv(4096)
@@ -387,7 +420,9 @@ def disconnect(et_id, drone_id):
 
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             for et in data:
                 if et["id"] == et_id:
                     print("Disconnect tag:", et["connected"])
@@ -399,7 +434,9 @@ def disconnect(et_id, drone_id):
             return
         
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
 
     if STATUS != "LAND":
         land()
@@ -414,12 +451,13 @@ def telemetry(et_id, drone_id, et_port):
     # crear clave de sesion
     #session_key = os.urandom(32)
     session_key = Fernet.generate_key()
-    print("session_key: ", session_key)
     
     # Recuperar la clave publica de la ET
     with open("db/estaciones.json", "r") as jsonFile:
         try:
-            data = json.load(jsonFile)
+            cipher_data = jsonFile.read()
+            data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+            data = json.loads(data_s)
             print(et_id)
             for el in data:
                 if el["id"] == et_id:
@@ -429,7 +467,9 @@ def telemetry(et_id, drone_id, et_port):
             print("ERROR")
             return
     with open("db/estaciones.json", "w") as jsonFile:
-        json.dump(data, jsonFile)
+        data_json = json.dumps(data)
+        cipher_data = file_fernet.encrypt(data_json.encode('utf-8'))
+        jsonFile.write(cipher_data.decode('utf-8'))
 
     
     # enviar la clave de sesion encriptada con la clave publica de la ET
@@ -477,7 +517,9 @@ def telemetry(et_id, drone_id, et_port):
 
             with open("db/estaciones.json", "r") as jsonFile:
                 try:
-                    data = json.load(jsonFile)
+                    cipher_data = jsonFile.read()
+                    data_s = file_fernet.decrypt(cipher_data).decode('utf-8')
+                    data = json.loads(data_s)
                     if not data:
                         print("Estacion ha muerto")
                         return
