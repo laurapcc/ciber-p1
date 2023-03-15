@@ -80,13 +80,14 @@ Un aspecto a tener en cuenta es que la batería de un dron dura 60 segundos en v
 ## Comunicaciones seguras
 
 -Para asegurar la confidencialidad de las comunicaciones se usa un esquema de clave pública y privada, que se intercambian al realizar la primera conexión, además se crea una clave de sesión para cada comunicación. 
-
+```
 -La clave pública de cada elemento se almacena en la base de datos y la clave privada en memoria, por lo que es diferente para cada ejecución del programa.
 
 ## Posibles bugs
 
 -A la hora de ejecutar los programas pueden surgir problemas si no se ejecutan en el orden indicado.
 -Si una ET o un Dron se cierran mientras que están conectados puede surgir el problema de que el socket que se utiliza para mandar el mensaje de telemetry se mantenga activo, esto se soluciona esperando a que el propio sistema operativo lo cierre.
+```
 -Al acabar cada uno de los tres programas su funcionalidad indica que se borre su parte de información de la base de datos, pero si la salida del programa es "extraña" puede pasar que no se borre, en estos casos recomendamos borrarla manualmente del .json correspondiente.
 
 ## Decisiones de diseño
